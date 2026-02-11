@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'auth_provider.dart';
 import 'api_service.dart';
+import 'socket_service.dart';
 
 // ─── Message Model ──────────────────────────────────────────────────────
 
@@ -70,10 +70,15 @@ class MessagesState {
 
 class MessagesNotifier extends StateNotifier<MessagesState> {
   final ApiService _api;
+  final SocketService _socket;
+  String? _currentChannelId;
 
-  MessagesNotifier(this._api) : super(const MessagesState());
+  MessagesNotifier(this._api, this._socket) : super(const MessagesState()) {
+    _socket.events.listen(_handleEvent);
+  }
 
   Future<void> fetchMessages(String channelId) async {
+    _currentChannelId = channelId;
     state = const MessagesState(isLoading: true);
     try {
       final data = await _api.getMessages(channelId);
@@ -89,16 +94,45 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 
   Future<bool> sendMessage(String channelId, String content) async {
     try {
+      // Optimistic update could go here, but let's wait for WS or API response
       final data = await _api.sendMessage(channelId, content);
+
+      // If WS is working, we might get the message via WS too.
+      // To avoid duplicates, we could check IDs, or just rely on WS if we trust it.
+      // But for now, let's append it from API response to be responsive.
+      // If WS comes later with same ID, we should deduplicate.
+
       final msg = MessageInfo.fromJson(data);
-      state = MessagesState(messages: [...state.messages, msg]);
+      _addMessage(msg);
+
       return true;
     } catch (_) {
       return false;
     }
   }
 
+  void _handleEvent(WsEvent event) {
+    if (event.type == 'MessageCreate' && event.data != null) {
+      try {
+        final msg = MessageInfo.fromJson(event.data!);
+        _addMessage(msg);
+      } catch (e) {
+        // print('Error parsing message: $e');
+      }
+    }
+  }
+
+  void _addMessage(MessageInfo msg) {
+    if (_currentChannelId != msg.channelId) return;
+
+    // Deduplicate
+    if (state.messages.any((m) => m.id == msg.id)) return;
+
+    state = MessagesState(messages: [...state.messages, msg]);
+  }
+
   void clear() {
+    _currentChannelId = null;
     state = const MessagesState();
   }
 }
@@ -108,5 +142,6 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
 final messagesProvider =
     StateNotifierProvider<MessagesNotifier, MessagesState>((ref) {
   final api = ref.watch(apiServiceProvider);
-  return MessagesNotifier(api);
+  final socket = ref.watch(socketServiceProvider);
+  return MessagesNotifier(api, socket);
 });

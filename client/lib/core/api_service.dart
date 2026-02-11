@@ -1,14 +1,15 @@
 import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// HTTP API client for the Antarcticom server.
 class ApiService {
-  static const String baseUrl = 'http://antarctis.xyz:8443';
+  static const String _baseUrl = 'http://antarctis.xyz:8443';
 
   final Dio _dio;
 
   ApiService()
       : _dio = Dio(BaseOptions(
-          baseUrl: baseUrl,
+          baseUrl: _baseUrl,
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
           headers: {'Content-Type': 'application/json'},
@@ -87,6 +88,10 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  // ─── Getters ────────────────────────────────────────────────────────
+  String get baseUrl => _baseUrl;
+  String get wsUrl => _baseUrl.replaceFirst('http', 'ws');
+
   // ─── Health ─────────────────────────────────────────────────────────
 
   Future<bool> healthCheck() async {
@@ -98,3 +103,7 @@ class ApiService {
     }
   }
 }
+
+// ─── Provider ─────────────────────────────────────────────────────────
+
+final apiServiceProvider = Provider<ApiService>((ref) => ApiService());

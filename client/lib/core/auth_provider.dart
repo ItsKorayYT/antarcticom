@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'socket_service.dart';
 
 // ─── User Model ─────────────────────────────────────────────────────────
 
@@ -66,8 +67,9 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final ApiService _api;
+  final SocketService _socket;
 
-  AuthNotifier(this._api) : super(const AuthState()) {
+  AuthNotifier(this._api, this._socket) : super(const AuthState()) {
     _tryRestoreSession();
   }
 
@@ -83,6 +85,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       if (token != null && username != null && userId != null) {
         _api.setToken(token);
+        _socket.connect(token);
+
         state = AuthState(
           isAuthenticated: true,
           token: token,
@@ -109,6 +113,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = UserInfo.fromJson(data['user'] as Map<String, dynamic>);
 
       _api.setToken(token);
+      _socket.connect(token);
       await _saveSession(token, user);
 
       state = AuthState(
@@ -141,6 +146,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final user = UserInfo.fromJson(data['user'] as Map<String, dynamic>);
 
       _api.setToken(token);
+      _socket.connect(token);
       await _saveSession(token, user);
 
       state = AuthState(
@@ -159,6 +165,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Log out and clear stored credentials.
   Future<void> logout() async {
     _api.setToken(null);
+    _socket.disconnect();
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     state = const AuthState();
@@ -195,9 +202,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
 // ─── Providers ──────────────────────────────────────────────────────────
 
-final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
-
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final api = ref.watch(apiServiceProvider);
-  return AuthNotifier(api);
+  final socket = ref.watch(socketServiceProvider);
+  return AuthNotifier(api, socket);
 });
