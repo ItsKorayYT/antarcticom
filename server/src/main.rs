@@ -104,9 +104,21 @@ async fn seed_default_server(pool: &PgPool) -> Result<()> {
     // Use a deterministic UUID so the seed is idempotent
     let server_id = Uuid::parse_str("00000000-0000-7000-8000-000000000001")?;
     // System owner — no real user owns the default server
-    let system_owner = Uuid::parse_str("00000000-0000-7000-8000-000000000000")?;
+    let system_owner_id = Uuid::parse_str("00000000-0000-7000-8000-000000000000")?;
 
-    db::servers::create(pool, server_id, "Antarcticom", system_owner, false).await?;
+    // Ensure system user exists
+    if db::users::find_by_id(pool, system_owner_id).await?.is_none() {
+        tracing::info!("Creating system user for default server");
+        db::users::create(
+            pool,
+            system_owner_id,
+            "system",
+            "System",
+            "$argon2id$v=19$m=19456,t=2,p=1$wc8tCg$Ew", // Dummy hash
+        ).await?;
+    }
+
+    db::servers::create(pool, server_id, "Antarcticom", system_owner_id, false).await?;
 
     // Create default channels
     let general_id = Uuid::parse_str("00000000-0000-7000-8000-000000000010")?;
