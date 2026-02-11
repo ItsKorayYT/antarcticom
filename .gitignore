@@ -1,0 +1,40 @@
+# Build artifacts
+target/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment
+.env
+.env.local
+
+# Certificates (generated)
+certs/
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+
+# Flutter
+client/.dart_tool/
+client/.packages
+client/build/
+client/.flutter-plugins
+client/.flutter-plugins-dependencies
+
+# Rust
+server/target/
+
+# Logs
+*.log

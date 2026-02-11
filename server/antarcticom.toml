@@ -1,0 +1,57 @@
+# Antarcticom Server Configuration
+# Copy this file and adjust for your deployment.
+
+[server]
+# Bind address for the API + WebSocket server
+host = "0.0.0.0"
+port = 8443
+# Public-facing URL (used for invite links, federation)
+public_url = "https://localhost:8443"
+
+[database]
+# PostgreSQL connection string (use sqlite:// for Lite tier)
+url = "postgres://antarcticom:antarcticom@localhost:5432/antarcticom"
+# Maximum connection pool size
+max_connections = 20
+
+[redis]
+# Redis connection string (optional for Lite tier)
+url = "redis://localhost:6379"
+
+[voice]
+# Bind address for the QUIC voice server
+host = "0.0.0.0"
+port = 8444
+# Maximum concurrent voice sessions
+max_sessions = 500
+# Opus bitrate range (kbps)
+min_bitrate = 32
+max_bitrate = 128
+
+[tls]
+# TLS certificate and key paths
+# Set to "auto" for built-in ACME (Let's Encrypt)
+cert_path = "certs/cert.pem"
+key_path = "certs/key.pem"
+# Enable auto-TLS via ACME
+acme_enabled = false
+acme_domain = ""
+
+[auth]
+# JWT secret (generate a strong random string)
+jwt_secret = "CHANGE_ME_IN_PRODUCTION"
+# Token expiry in seconds (default: 7 days)
+token_expiry = 604800
+# Allow local account registration (no official identity server)
+allow_local_registration = true
+
+[identity]
+# Optional: connect to official Antarcticom identity server for federation
+federation_enabled = false
+identity_server_url = ""
+
+[logging]
+# Log level: trace, debug, info, warn, error
+level = "info"
+# Output format: "pretty" or "json"
+format = "pretty"

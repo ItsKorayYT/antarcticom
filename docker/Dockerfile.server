@@ -1,0 +1,58 @@
+# ─── Build Stage ─────────────────────────────────────────────────────────
+FROM rust:1.85-bookworm AS builder
+
+WORKDIR /build
+
+# Copy dependency manifests first for Docker layer caching
+COPY server/Cargo.toml server/Cargo.lock* ./server/
+COPY proto/ ./proto/
+
+# Create a dummy main.rs to build only dependencies
+RUN mkdir -p server/src && echo "fn main() {}" > server/src/main.rs
+RUN cd server && cargo build --release 2>/dev/null || true
+
+# Now copy actual source
+COPY server/ ./server/
+
+# Touch main.rs to invalidate the dummy build
+RUN touch server/src/main.rs
+
+# Build the real binary
+RUN cd server && cargo build --release
+
+# ─── Runtime Stage ───────────────────────────────────────────────────────
+FROM debian:bookworm-slim AS runtime
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    libssl3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -s /bin/bash antarcticom
+
+WORKDIR /app
+
+# Copy the compiled binary
+COPY --from=builder /build/server/target/release/antarcticom-server .
+
+# Copy default config
+COPY server/antarcticom.toml ./antarcticom.toml
+
+# Copy migrations
+COPY server/migrations/ ./migrations/
+
+# Switch to non-root user
+USER antarcticom
+
+# Expose API + Voice ports
+EXPOSE 8443 8444/udp
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+    CMD curl -f http://localhost:8443/health || exit 1
+
+ENV ANTARCTICOM_CONFIG=/app/antarcticom.toml
+ENV RUST_LOG=info
+
+ENTRYPOINT ["./antarcticom-server"]

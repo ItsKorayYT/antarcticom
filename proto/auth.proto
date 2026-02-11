@@ -1,0 +1,49 @@
+syntax = "proto3";
+package antarcticom.auth;
+
+// Registration request.
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+  string display_name = 3;
+  bytes identity_key_public = 4;         // Ed25519 public key
+  PreKeyBundle pre_key_bundle = 5;       // Initial pre-key bundle for E2EE
+}
+
+message RegisterResponse {
+  string token = 1;
+  UserInfo user = 2;
+}
+
+// Login request.
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+  bytes device_key = 3;                  // Optional device-based auth
+}
+
+message LoginResponse {
+  string token = 1;
+  UserInfo user = 2;
+}
+
+// User info (public).
+message UserInfo {
+  string id = 1;                         // UUID
+  string username = 2;
+  string display_name = 3;
+  string avatar_hash = 4;
+}
+
+// E2EE Pre-Key Bundle (uploaded to server for X3DH).
+message PreKeyBundle {
+  bytes identity_key = 1;               // Ed25519 public key
+  bytes signed_pre_key = 2;             // X25519 public key
+  bytes signed_pre_key_signature = 3;   // Signature by identity key
+  repeated bytes one_time_pre_keys = 4; // X25519 public keys (batch)
+}
+
+// Request another user's pre-key bundle (for initiating E2EE).
+message FetchPreKeyBundle {
+  string user_id = 1;
+}
