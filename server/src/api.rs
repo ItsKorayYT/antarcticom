@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message as WsMessage, WebSocket};
-use axum::extract::{Path, Query, State, WebSocketUpgrade};
+use axum::extract::{FromRequestParts, Path, Query, State, WebSocketUpgrade};
 use axum::http::StatusCode;
+use axum::http::request::Parts;
 use axum::response::IntoResponse;
 use axum::routing::{get, post, delete};
 use axum::{Json, Router};
@@ -58,6 +59,35 @@ impl AppState {
                 }
             }
         }
+    }
+}
+
+// ─── JWT Auth Extractor ─────────────────────────────────────────────────────
+
+/// Authenticated user extracted from the `Authorization: Bearer <token>` header.
+pub struct AuthUser {
+    pub user_id: Uuid,
+}
+
+#[axum::async_trait]
+impl FromRequestParts<AppState> for AuthUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let header = parts
+            .headers
+            .get("Authorization")
+            .and_then(|v| v.to_str().ok())
+            .ok_or(AppError::Unauthorized)?;
+
+        let token = header
+            .strip_prefix("Bearer ")
+            .ok_or(AppError::Unauthorized)?;
+
+        let claims = auth::validate_token(&state.config.auth, token)?;
+        let user_id = auth::user_id_from_claims(&claims)?;
+
+        Ok(AuthUser { user_id })
     }
 }
 
@@ -118,6 +148,12 @@ async fn register(
     let user_id = Uuid::now_v7();
     let user = db::users::create(&state.db, user_id, &req.username, &display_name, &password_hash).await?;
 
+    // Auto-join user to all existing servers (i.e. the default server)
+    let all_servers = db::servers::list_all(&state.db).await?;
+    for server in &all_servers {
+        let _ = db::members::add(&state.db, user.id, server.id).await;
+    }
+
     // Generate token
     let token = auth::create_token(&state.config.auth, user.id, &user.username)?;
 
@@ -156,10 +192,10 @@ async fn login(
 
 async fn create_server(
     State(state): State<AppState>,
+    auth: AuthUser,
     Json(req): Json<CreateServerRequest>,
 ) -> AppResult<Json<Server>> {
-    // TODO: extract user from JWT auth middleware
-    let user_id = Uuid::now_v7(); // Placeholder
+    let user_id = auth.user_id;
 
     let server_id = Uuid::now_v7();
     let server = db::servers::create(
@@ -185,10 +221,9 @@ async fn create_server(
 
 async fn list_servers(
     State(state): State<AppState>,
+    auth: AuthUser,
 ) -> AppResult<Json<Vec<Server>>> {
-    // TODO: extract user from JWT auth middleware
-    let user_id = Uuid::now_v7(); // Placeholder
-    let servers = db::servers::list_for_user(&state.db, user_id).await?;
+    let servers = db::servers::list_for_user(&state.db, auth.user_id).await?;
     Ok(Json(servers))
 }
 
@@ -204,21 +239,19 @@ async fn get_server(
 
 async fn join_server(
     State(state): State<AppState>,
+    auth: AuthUser,
     Path(server_id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
-    // TODO: extract user from JWT + validate invite
-    let user_id = Uuid::now_v7(); // Placeholder
-    db::members::add(&state.db, user_id, server_id).await?;
+    db::members::add(&state.db, auth.user_id, server_id).await?;
     Ok(StatusCode::OK)
 }
 
 async fn leave_server(
     State(state): State<AppState>,
+    auth: AuthUser,
     Path(server_id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
-    // TODO: extract user from JWT
-    let user_id = Uuid::now_v7(); // Placeholder
-    db::members::remove(&state.db, user_id, server_id).await?;
+    db::members::remove(&state.db, auth.user_id, server_id).await?;
     Ok(StatusCode::OK)
 }
 
@@ -259,18 +292,16 @@ async fn list_channels(
 
 async fn send_message(
     State(state): State<AppState>,
+    auth: AuthUser,
     Path(channel_id): Path<Uuid>,
     Json(req): Json<SendMessageRequest>,
 ) -> AppResult<Json<Message>> {
-    // TODO: extract user from JWT auth middleware
-    let user_id = Uuid::now_v7(); // Placeholder
-
     let message_id = state.snowflake.next_id();
     let message = db::messages::create(
         &state.db,
         message_id,
         channel_id,
-        user_id,
+        auth.user_id,
         &req.content,
         req.reply_to_id,
     )

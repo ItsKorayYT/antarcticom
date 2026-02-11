@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/chat/channel_screen.dart';
 import 'auth_provider.dart';
 
 /// App router provider — manages all navigation with auth-based redirects.
@@ -52,8 +53,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: 'home',
             builder: (context, state) => const Center(
               child: Text(
-                'Welcome to Antarcticom!',
-                style: TextStyle(fontSize: 18),
+                'Welcome to Antarcticom!\nCreate or select a server to get started.',
+                style: TextStyle(fontSize: 16, color: Color(0xFF8E9297)),
+                textAlign: TextAlign.center,
               ),
             ),
           ),
@@ -63,7 +65,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) {
               final serverId = state.pathParameters['serverId']!;
               final channelId = state.pathParameters['channelId']!;
-              return ChannelPlaceholder(
+              return ChannelScreen(
                 serverId: serverId,
                 channelId: channelId,
               );
@@ -86,25 +88,3 @@ final routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
-
-/// Placeholder widget for channel view (will be replaced by full implementation).
-class ChannelPlaceholder extends StatelessWidget {
-  final String serverId;
-  final String channelId;
-
-  const ChannelPlaceholder({
-    super.key,
-    required this.serverId,
-    required this.channelId,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        'Channel: $channelId\nServer: $serverId',
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-}

@@ -133,6 +133,16 @@ pub mod servers {
         .await?;
         Ok(servers)
     }
+
+    /// List all servers (used for auto-joining new users).
+    pub async fn list_all(pool: &PgPool) -> AppResult<Vec<Server>> {
+        let servers = sqlx::query_as::<_, Server>(
+            "SELECT * FROM servers ORDER BY name",
+        )
+        .fetch_all(pool)
+        .await?;
+        Ok(servers)
+    }
 }
 
 // ─── Channel Queries ────────────────────────────────────────────────────────
@@ -299,7 +309,7 @@ pub mod members {
             r#"
             INSERT INTO members (user_id, server_id, joined_at)
             VALUES ($1, $2, NOW())
-            ON CONFLICT (user_id, server_id) DO NOTHING
+            ON CONFLICT (user_id, server_id) DO UPDATE SET joined_at = members.joined_at
             RETURNING *
             "#,
         )
