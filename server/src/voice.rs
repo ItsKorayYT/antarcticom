@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use anyhow::Result;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -153,7 +154,9 @@ pub async fn start_voice_server(config: &VoiceConfig) -> Result<()> {
     let key_der = rustls::pki_types::PrivateKeyDer::try_from(cert.key_pair.serialize_der())
         .map_err(|e| anyhow::anyhow!("Failed to parse private key: {}", e))?;
 
-    let mut server_crypto = rustls::ServerConfig::builder()
+    let provider = rustls::crypto::ring::default_provider();
+    let server_crypto = rustls::ServerConfig::builder_with_provider(Arc::new(provider))
+        .with_safe_default_protocol_versions()?
         .with_no_client_auth()
         .with_single_cert(vec![cert_der], key_der)?;
 
@@ -201,10 +204,10 @@ pub async fn start_voice_server(config: &VoiceConfig) -> Result<()> {
 /// 1. Client opens a bidirectional stream for signaling (join/leave/mute)
 /// 2. Client opens unidirectional streams for audio data (Opus frames)
 /// 3. Server forwards audio to other participants via their connections
-async fn handle_voice_connection(connection: quinn::Connection, sfu: Arc<SfuServer>) {
+async fn handle_voice_connection(connection: quinn::Connection, _sfu: Arc<SfuServer>) {
     // Accept the signaling stream
     match connection.accept_bi().await {
-        Ok((mut send, mut recv)) => {
+        Ok((_send, mut recv)) => {
             // Read session setup data
             let mut buf = vec![0u8; 4096];
             match recv.read(&mut buf).await {

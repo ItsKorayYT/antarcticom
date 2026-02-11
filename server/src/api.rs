@@ -1,7 +1,8 @@
+#[allow(unused_imports)]
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use axum::extract::ws::{Message, WebSocket};
+use axum::extract::ws::{Message as WsMessage, WebSocket};
 use axum::extract::{Path, Query, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
@@ -324,7 +325,7 @@ async fn ws_upgrade(
 async fn handle_ws(mut socket: WebSocket, state: AppState) {
     // Wait for Identify message with token
     let user_id = match socket.recv().await {
-        Some(Ok(Message::Text(text))) => {
+        Some(Ok(WsMessage::Text(text))) => {
             match serde_json::from_str::<WsEvent>(&text) {
                 Ok(WsEvent::Identify { token }) => {
                     match auth::validate_token(&state.config.auth, &token) {
@@ -358,14 +359,14 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
         session_id: Uuid::now_v7().to_string(),
     };
     let _ = socket
-        .send(Message::Text(serde_json::to_string(&ready).unwrap().into()))
+        .send(WsMessage::Text(serde_json::to_string(&ready).unwrap().into()))
         .await;
 
     // Spawn task to forward broadcast messages to WebSocket
     let mut send_socket = socket;
     let forward_handle = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
-            if send_socket.send(Message::Text(msg.into())).await.is_err() {
+            if send_socket.send(WsMessage::Text(msg.into())).await.is_err() {
                 break;
             }
         }

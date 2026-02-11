@@ -10,8 +10,7 @@
 /// and called from the Flutter client via FFI, as well as used
 /// server-side for key distribution.
 
-use ring::aead::{self, Aead, LessSafeKey, UnboundKey, AES_256_GCM, Nonce};
-use ring::agreement::{self, EphemeralPrivateKey, PublicKey, UnparsedPublicKey, X25519};
+use ring::aead::{self, LessSafeKey, UnboundKey, AES_256_GCM, Nonce};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::signature::{self, Ed25519KeyPair, KeyPair};
 use anyhow::Result;
@@ -167,8 +166,9 @@ pub fn decrypt_voice_frame(
 pub fn derive_key(shared_secret: &[u8], info: &[u8]) -> Result<[u8; 32]> {
     let salt = ring::hkdf::Salt::new(ring::hkdf::HKDF_SHA256, &[]);
     let prk = salt.extract(shared_secret);
+    let info_refs = [info];
     let okm = prk
-        .expand(&[info], ring::hkdf::HKDF_SHA256)
+        .expand(&info_refs, ring::hkdf::HKDF_SHA256)
         .map_err(|_| anyhow::anyhow!("HKDF expand failed"))?;
 
     let mut key = [0u8; 32];
