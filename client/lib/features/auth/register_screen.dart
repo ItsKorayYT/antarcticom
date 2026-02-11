@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../core/auth_provider.dart';
 
-/// Registration screen.
-class RegisterScreen extends StatefulWidget {
+/// Registration screen — wired to real auth API.
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _usernameController = TextEditingController();
   final _displayNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -27,6 +29,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authProvider);
+
+    // Show error snackbar when auth error changes
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (next.error != null && next.error != prev?.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.error!),
+            backgroundColor: Colors.redAccent.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
+
     return Scaffold(
       backgroundColor: AntarcticomTheme.bgDeepest,
       body: Center(
@@ -75,6 +92,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         color: AntarcticomTheme.textMuted, size: 20),
                   ),
                   style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingMd),
 
@@ -82,11 +100,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextField(
                   controller: _displayNameController,
                   decoration: const InputDecoration(
-                    hintText: 'Display Name',
+                    hintText: 'Display Name (optional)',
                     prefixIcon: Icon(Icons.badge_outlined,
                         color: AntarcticomTheme.textMuted, size: 20),
                   ),
                   style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingMd),
 
@@ -100,6 +119,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         color: AntarcticomTheme.textMuted, size: 20),
                   ),
                   style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingMd),
 
@@ -113,6 +133,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         color: AntarcticomTheme.textMuted, size: 20),
                   ),
                   style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _handleRegister(),
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingLg),
 
@@ -127,12 +149,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           BorderRadius.circular(AntarcticomTheme.radiusMd),
                     ),
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleRegister,
+                      onPressed: auth.isLoading ? null : _handleRegister,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         shadowColor: Colors.transparent,
                       ),
-                      child: _isLoading
+                      child: auth.isLoading
                           ? const SizedBox(
                               width: 20,
                               height: 20,
@@ -149,9 +171,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                 // Login link
                 TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
+                  onPressed: () => context.go('/login'),
                   child: RichText(
                     text: const TextSpan(
                       text: 'Already have an account? ',
@@ -177,9 +197,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _handleRegister() async {
-    setState(() => _isLoading = true);
-    // TODO: implement registration via API
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() => _isLoading = false);
+    final username = _usernameController.text.trim();
+    final displayName = _displayNameController.text.trim();
+    final password = _passwordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    if (username.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill in all required fields'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (password != confirmPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Passwords do not match'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (password.length < 8) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password must be at least 8 characters'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final success = await ref.read(authProvider.notifier).register(
+          username,
+          password,
+          displayName: displayName.isNotEmpty ? displayName : null,
+        );
+    if (success && mounted) {
+      context.go('/channels/@me');
+    }
   }
 }

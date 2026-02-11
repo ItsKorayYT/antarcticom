@@ -1,19 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../core/auth_provider.dart';
 
-/// Login screen with premium dark UI.
-class LoginScreen extends StatefulWidget {
+/// Login screen with premium dark UI — wired to real auth API.
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _LoginScreenState extends ConsumerState<LoginScreen>
     with SingleTickerProviderStateMixin {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _isLoading = false;
   late AnimationController _glowController;
   late Animation<double> _glowAnimation;
 
@@ -39,6 +41,21 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authProvider);
+
+    // Show error snackbar when auth error changes
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (next.error != null && next.error != prev?.error) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(next.error!),
+            backgroundColor: Colors.redAccent.shade700,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
+
     return Scaffold(
       backgroundColor: AntarcticomTheme.bgDeepest,
       body: Center(
@@ -102,6 +119,7 @@ class _LoginScreenState extends State<LoginScreen>
                         color: AntarcticomTheme.textMuted, size: 20),
                   ),
                   style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingMd),
 
@@ -115,6 +133,8 @@ class _LoginScreenState extends State<LoginScreen>
                         color: AntarcticomTheme.textMuted, size: 20),
                   ),
                   style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _handleLogin(),
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingLg),
 
@@ -129,12 +149,12 @@ class _LoginScreenState extends State<LoginScreen>
                           BorderRadius.circular(AntarcticomTheme.radiusMd),
                     ),
                     child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleLogin,
+                      onPressed: auth.isLoading ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.transparent,
                         shadowColor: Colors.transparent,
                       ),
-                      child: _isLoading
+                      child: auth.isLoading
                           ? const SizedBox(
                               width: 20,
                               height: 20,
@@ -151,9 +171,7 @@ class _LoginScreenState extends State<LoginScreen>
 
                 // Register link
                 TextButton(
-                  onPressed: () {
-                    // Navigate to register
-                  },
+                  onPressed: () => context.go('/register'),
                   child: RichText(
                     text: const TextSpan(
                       text: "Don't have an account? ",
@@ -179,9 +197,22 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   Future<void> _handleLogin() async {
-    setState(() => _isLoading = true);
-    // TODO: implement actual login via API
-    await Future.delayed(const Duration(seconds: 1));
-    setState(() => _isLoading = false);
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
+
+    if (username.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter username and password'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final success = await ref.read(authProvider.notifier).login(username, password);
+    if (success && mounted) {
+      context.go('/channels/@me');
+    }
   }
 }

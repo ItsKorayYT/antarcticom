@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
+import '../../core/auth_provider.dart';
 
 /// Main app shell — server list sidebar + channel list + content area.
 /// This is the root layout that wraps all authenticated views.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   final Widget child;
 
   const HomeScreen({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final user = auth.user;
     return Scaffold(
       backgroundColor: AntarcticomTheme.bgPrimary,
       body: Row(
@@ -152,10 +157,12 @@ class HomeScreen extends StatelessWidget {
                           borderRadius:
                               BorderRadius.circular(AntarcticomTheme.radiusFull),
                         ),
-                        child: const Center(
+                        child: Center(
                           child: Text(
-                            'K',
-                            style: TextStyle(
+                            user != null && user.displayName.isNotEmpty
+                                ? user.displayName[0].toUpperCase()
+                                : '?',
+                            style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
@@ -170,7 +177,7 @@ class HomeScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'koray',
+                              user?.displayName ?? 'User',
                               style: Theme.of(context)
                                   .textTheme
                                   .labelMedium
@@ -198,9 +205,12 @@ class HomeScreen extends StatelessWidget {
                         splashRadius: 16,
                       ),
                       IconButton(
-                        icon: const Icon(Icons.settings, size: 18),
+                        icon: const Icon(Icons.logout, size: 18),
                         color: AntarcticomTheme.textSecondary,
-                        onPressed: () {},
+                        onPressed: () async {
+                          await ref.read(authProvider.notifier).logout();
+                          if (context.mounted) context.go('/login');
+                        },
                         splashRadius: 16,
                       ),
                     ],
