@@ -102,16 +102,16 @@ pub fn build_router(state: AppState) -> Router {
         // Servers
         .route("/api/servers", post(create_server))
         .route("/api/servers", get(list_servers))
-        .route("/api/servers/{server_id}", get(get_server))
-        .route("/api/servers/{server_id}/join", post(join_server))
-        .route("/api/servers/{server_id}/leave", post(leave_server))
+        .route("/api/servers/:server_id", get(get_server))
+        .route("/api/servers/:server_id/join", post(join_server))
+        .route("/api/servers/:server_id/leave", post(leave_server))
         // Channels
-        .route("/api/servers/{server_id}/channels", post(create_channel))
-        .route("/api/servers/{server_id}/channels", get(list_channels))
+        .route("/api/servers/:server_id/channels", post(create_channel))
+        .route("/api/servers/:server_id/channels", get(list_channels))
         // Messages
-        .route("/api/channels/{channel_id}/messages", post(send_message))
-        .route("/api/channels/{channel_id}/messages", get(get_messages))
-        .route("/api/channels/{channel_id}/messages/{message_id}", delete(delete_message))
+        .route("/api/channels/:channel_id/messages", post(send_message))
+        .route("/api/channels/:channel_id/messages", get(get_messages))
+        .route("/api/channels/:channel_id/messages/:message_id", delete(delete_message))
         // WebSocket gateway
         .route("/ws", get(ws_upgrade))
         // Health check

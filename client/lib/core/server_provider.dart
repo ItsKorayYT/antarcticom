@@ -69,15 +69,18 @@ class ServersNotifier extends StateNotifier<ServersState> {
   ServersNotifier(this._api) : super(const ServersState());
 
   Future<void> fetchServers() async {
-    state = state.copyWith(isLoading: true, error: null);
+    state = const ServersState(isLoading: true);
     try {
       final data = await _api.listServers();
+      print('DEBUG: Fetched raw servers: $data');
       final servers = data
           .map((e) => ServerInfo.fromJson(e as Map<String, dynamic>))
           .toList();
       state = ServersState(servers: servers);
-    } catch (e) {
-      state = state.copyWith(isLoading: false, error: 'Failed to load servers');
+      print('DEBUG: Parsed ${servers.length} servers');
+    } catch (e, st) {
+      print('DEBUG: Failed to fetch servers: $e\n$st');
+      state = const ServersState(error: 'Failed to load servers');
     }
   }
 
