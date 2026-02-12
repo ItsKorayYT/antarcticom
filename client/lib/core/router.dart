@@ -78,12 +78,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) =>
                 const Center(child: Text('Friends — Coming soon')),
           ),
-          GoRoute(
-            path: '/settings',
-            name: 'settings',
-            builder: (context, state) => const SettingsScreen(),
-          ),
         ],
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        builder: (context, state) => const SettingsScreen(),
       ),
     ],
   );

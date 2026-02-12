@@ -8,14 +8,15 @@ class AntarcticomTheme {
   // ─── Color Palette ──────────────────────────────────────────────────────
 
   /// Background colors (layered depth)
-  static const Color bgDeepest = Color(0xFF0A0A0F);    // Deepest background
-  static const Color bgPrimary = Color(0xFF0F1117);    // Main background
-  static const Color bgSecondary = Color(0xFF151822);  // Sidebar / panels
-  static const Color bgTertiary = Color(0xFF1B1F2E);   // Cards / elevated surfaces
-  static const Color bgHover = Color(0xFF222738);       // Hover state
+  static const Color bgDeepest = Color(0xFF0A0A0F); // Deepest background
+  static const Color bgPrimary = Color(0xFF0F1117); // Main background
+  static const Color bgSecondary = Color(0xFF151822); // Sidebar / panels
+  static const Color bgTertiary =
+      Color(0xFF1B1F2E); // Cards / elevated surfaces
+  static const Color bgHover = Color(0xFF222738); // Hover state
 
   /// Accent colors
-  static const Color accentPrimary = Color(0xFF6C5CE7);   // Primary violet
+  static const Color accentPrimary = Color(0xFF6C5CE7); // Primary violet
   static const Color accentSecondary = Color(0xFF00D2FF); // Cyan highlight
   static const Color accentGradientStart = Color(0xFF6C5CE7);
   static const Color accentGradientEnd = Color(0xFF00D2FF);
@@ -98,13 +99,20 @@ class AntarcticomTheme {
 
         // Typography
         textTheme: GoogleFonts.interTextTheme(
-          const TextTheme(
+          TextTheme(
             // Headlines
             headlineLarge: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w700,
               color: textPrimary,
               letterSpacing: -0.5,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.8),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             headlineMedium: TextStyle(
               fontSize: 22,
@@ -124,6 +132,13 @@ class AntarcticomTheme {
               fontWeight: FontWeight.w400,
               color: textPrimary,
               height: 1.5,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.6),
+                  blurRadius: 3,
+                  offset: const Offset(0, 1),
+                ),
+              ],
             ),
             bodyMedium: TextStyle(
               fontSize: 14,
@@ -143,6 +158,13 @@ class AntarcticomTheme {
               fontWeight: FontWeight.w600,
               color: textPrimary,
               letterSpacing: 0.2,
+              shadows: [
+                Shadow(
+                  color: Colors.black.withValues(alpha: 0.8),
+                  blurRadius: 3,
+                  offset: const Offset(0, 1),
+                ),
+              ],
             ),
             labelMedium: TextStyle(
               fontSize: 12,

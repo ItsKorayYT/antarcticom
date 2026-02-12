@@ -41,6 +41,7 @@ dependencies:
   # Crypto (for E2EE)
   cryptography: ^2.7.0
   pointycastle: ^3.7.0
+  flutter_colorpicker: ^1.1.0
 
 dev_dependencies:
   flutter_test:

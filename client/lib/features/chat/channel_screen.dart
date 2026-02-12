@@ -5,6 +5,7 @@ import '../../core/auth_provider.dart';
 import '../../core/message_provider.dart';
 import '../../core/channel_provider.dart';
 import '../../core/settings_provider.dart';
+import '../home/rainbow_builder.dart';
 
 /// Full channel view — header, message list, and message input.
 class ChannelScreen extends ConsumerStatefulWidget {
@@ -72,13 +73,8 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
           padding: const EdgeInsets.symmetric(
               horizontal: AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color:
-                AntarcticomTheme.bgPrimary.withOpacity(settings.sidebarOpacity),
-            border: Border(
-              bottom: BorderSide(
-                color: AntarcticomTheme.bgDeepest.withValues(alpha: 0.5),
-              ),
-            ),
+            color: AntarcticomTheme.bgPrimary
+                .withValues(alpha: settings.sidebarOpacity),
           ),
           child: Row(
             children: [
@@ -99,10 +95,16 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
         // ─── Messages ─────────────────────────────────────────────────
         Expanded(
           child: msgState.isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: AntarcticomTheme.accentPrimary,
-                  ),
+              ? Center(
+                  child: RainbowBuilder(
+                      enabled: settings.rainbowMode,
+                      builder: (context, color) {
+                        return CircularProgressIndicator(
+                          color: settings.rainbowMode
+                              ? color
+                              : AntarcticomTheme.accentPrimary,
+                        );
+                      }),
                 )
               : msgState.error != null
                   ? Center(
@@ -149,23 +151,27 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                             ],
                           ),
                         )
-                      : ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.symmetric(
-                            vertical: AntarcticomTheme.spacingMd,
+                      : Container(
+                          color: AntarcticomTheme.bgPrimary
+                              .withOpacity(settings.backgroundOpacity),
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AntarcticomTheme.spacingMd,
+                            ),
+                            itemCount: msgState.messages.length,
+                            itemBuilder: (context, index) {
+                              final msg = msgState.messages[index];
+                              final isOwn = msg.authorId == auth.user?.id;
+                              return _MessageBubble(
+                                message: msg,
+                                isOwn: isOwn,
+                                authorName: isOwn
+                                    ? (auth.user?.displayName ?? 'You')
+                                    : msg.authorId.substring(0, 8),
+                              );
+                            },
                           ),
-                          itemCount: msgState.messages.length,
-                          itemBuilder: (context, index) {
-                            final msg = msgState.messages[index];
-                            final isOwn = msg.authorId == auth.user?.id;
-                            return _MessageBubble(
-                              message: msg,
-                              isOwn: isOwn,
-                              authorName: isOwn
-                                  ? (auth.user?.displayName ?? 'You')
-                                  : msg.authorId.substring(0, 8),
-                            );
-                          },
                         ),
         ),
 
@@ -175,11 +181,6 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
           decoration: BoxDecoration(
             color:
                 AntarcticomTheme.bgPrimary.withOpacity(settings.sidebarOpacity),
-            border: Border(
-              top: BorderSide(
-                color: AntarcticomTheme.bgDeepest.withValues(alpha: 0.3),
-              ),
-            ),
           ),
           child: Row(
             children: [
@@ -210,20 +211,27 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                 ),
               ),
               const SizedBox(width: AntarcticomTheme.spacingSm),
-              IconButton(
-                onPressed: _isSending ? null : _sendMessage,
-                icon: _isSending
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AntarcticomTheme.accentPrimary),
-                      )
-                    : const Icon(Icons.send_rounded),
-                color: settings.accentColor,
-                splashRadius: 20,
-              ),
+              RainbowBuilder(
+                  enabled: settings.rainbowMode,
+                  builder: (context, color) {
+                    return IconButton(
+                      onPressed: _isSending ? null : _sendMessage,
+                      icon: _isSending
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: settings.rainbowMode
+                                      ? color
+                                      : AntarcticomTheme.accentPrimary),
+                            )
+                          : const Icon(Icons.send_rounded),
+                      color:
+                          settings.rainbowMode ? color : settings.accentColor,
+                      splashRadius: 20,
+                    );
+                  }),
             ],
           ),
         ),
