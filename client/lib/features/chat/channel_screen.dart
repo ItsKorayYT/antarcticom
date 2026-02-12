@@ -4,6 +4,7 @@ import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
 import '../../core/message_provider.dart';
 import '../../core/channel_provider.dart';
+import '../../core/settings_provider.dart';
 
 /// Full channel view — header, message list, and message input.
 class ChannelScreen extends ConsumerStatefulWidget {
@@ -54,6 +55,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
     final msgState = ref.watch(messagesProvider);
     final auth = ref.watch(authProvider);
     final channelsState = ref.watch(channelsProvider);
+    final settings = ref.watch(settingsProvider);
 
     // Find channel name
     final channelName = channelsState.channels
@@ -70,7 +72,8 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
           padding: const EdgeInsets.symmetric(
               horizontal: AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color: AntarcticomTheme.bgPrimary,
+            color:
+                AntarcticomTheme.bgPrimary.withOpacity(settings.sidebarOpacity),
             border: Border(
               bottom: BorderSide(
                 color: AntarcticomTheme.bgDeepest.withValues(alpha: 0.5),
@@ -170,7 +173,8 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
         Container(
           padding: const EdgeInsets.all(AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color: AntarcticomTheme.bgPrimary,
+            color:
+                AntarcticomTheme.bgPrimary.withOpacity(settings.sidebarOpacity),
             border: Border(
               top: BorderSide(
                 color: AntarcticomTheme.bgDeepest.withValues(alpha: 0.3),
@@ -182,7 +186,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: AntarcticomTheme.bgTertiary,
+                    color: AntarcticomTheme.bgTertiary.withOpacity(0.8),
                     borderRadius:
                         BorderRadius.circular(AntarcticomTheme.radiusMd),
                   ),
@@ -217,7 +221,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                             color: AntarcticomTheme.accentPrimary),
                       )
                     : const Icon(Icons.send_rounded),
-                color: AntarcticomTheme.accentPrimary,
+                color: settings.accentColor,
                 splashRadius: 20,
               ),
             ],

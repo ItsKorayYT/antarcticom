@@ -5,6 +5,8 @@ import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
 import '../../core/server_provider.dart';
 import '../../core/channel_provider.dart';
+import '../../core/settings_provider.dart';
+import 'starfield_widget.dart';
 
 /// Main app shell — server list sidebar + channel list + content area.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -36,6 +38,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final selectedServerId = ref.watch(selectedServerIdProvider);
     final channels = ref.watch(channelsProvider);
     final selectedChannelId = ref.watch(selectedChannelIdProvider);
+    final settings = ref.watch(settingsProvider);
 
     // Auto-select the first server once loaded
     if (!_didAutoSelect &&
@@ -55,251 +58,274 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AntarcticomTheme.bgPrimary,
-      body: Row(
+      backgroundColor: AntarcticomTheme.bgDeepest, // Base color for starfield
+      body: Stack(
         children: [
-          // ─── Server List (narrow sidebar) ───────────────────────────
-          Container(
-            width: 72,
-            color: AntarcticomTheme.bgDeepest,
-            child: Column(
-              children: [
-                const SizedBox(height: AntarcticomTheme.spacingMd),
-
-                // Home / DMs button
-                _ServerIcon(
-                  isHome: true,
-                  isSelected: selectedServerId == null,
-                  onTap: () {
-                    ref.read(selectedServerIdProvider.notifier).state = null;
-                    ref.read(channelsProvider.notifier).clear();
-                    ref.read(selectedChannelIdProvider.notifier).state = null;
-                    context.go('/channels/@me');
-                  },
-                ),
-                const SizedBox(height: AntarcticomTheme.spacingSm),
-
-                // Divider
-                Container(
-                  width: 32,
-                  height: 2,
-                  decoration: BoxDecoration(
-                    color: AntarcticomTheme.bgTertiary,
-                    borderRadius: BorderRadius.circular(1),
-                  ),
-                ),
-                const SizedBox(height: AntarcticomTheme.spacingSm),
-
-                // Dynamic server list
-                Expanded(
-                  child: servers.isLoading
-                      ? const Center(
-                          child: SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AntarcticomTheme.accentPrimary,
-                            ),
-                          ),
-                        )
-                      : ListView(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: AntarcticomTheme.spacingXs),
-                          children: servers.servers.map((server) {
-                            return _ServerIcon(
-                              label: server.initials,
-                              color: AntarcticomTheme.accentPrimary,
-                              isSelected: selectedServerId == server.id,
-                              onTap: () => _selectServer(server),
-                            );
-                          }).toList(),
-                        ),
-                ),
-              ],
+          // ─── Starfield Background ───────────────────────────────────
+          if (settings.enableStarfield)
+            Positioned.fill(
+              child: StarfieldWidget(density: settings.starDensity),
             ),
-          ),
 
-          // ─── Channel List (sidebar) ─────────────────────────────────
-          Container(
-            width: 240,
-            color: AntarcticomTheme.bgSecondary,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Server header
-                Container(
-                  height: 48,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AntarcticomTheme.spacingMd),
-                  decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color:
-                            AntarcticomTheme.bgDeepest.withValues(alpha: 0.5),
+          // ─── Main Layout ────────────────────────────────────────────
+          Row(
+            children: [
+              // ─── Server List (narrow sidebar) ───────────────────────────
+              Container(
+                width: 72,
+                color: AntarcticomTheme.bgDeepest
+                    .withOpacity(settings.sidebarOpacity),
+                child: Column(
+                  children: [
+                    const SizedBox(height: AntarcticomTheme.spacingMd),
+
+                    // Home / DMs button
+                    _ServerIcon(
+                      isHome: true,
+                      isSelected: selectedServerId == null,
+                      onTap: () {
+                        ref.read(selectedServerIdProvider.notifier).state =
+                            null;
+                        ref.read(channelsProvider.notifier).clear();
+                        ref.read(selectedChannelIdProvider.notifier).state =
+                            null;
+                        context.go('/channels/@me');
+                      },
+                    ),
+                    const SizedBox(height: AntarcticomTheme.spacingSm),
+
+                    // Divider
+                    Container(
+                      width: 32,
+                      height: 2,
+                      decoration: BoxDecoration(
+                        color: AntarcticomTheme.bgTertiary.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(1),
                       ),
                     ),
-                  ),
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    selectedServerId != null
-                        ? (servers.servers
-                                .where((s) => s.id == selectedServerId)
-                                .map((s) => s.name)
-                                .firstOrNull ??
-                            'Server')
-                        : 'Direct Messages',
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelLarge
-                        ?.copyWith(fontWeight: FontWeight.w700),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                    const SizedBox(height: AntarcticomTheme.spacingSm),
 
-                // Channel list
-                Expanded(
-                  child: selectedServerId == null
-                      ? Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(
-                                AntarcticomTheme.spacingMd),
-                            child: Text(
-                              servers.servers.isEmpty
-                                  ? 'Create or join a server to get started!'
-                                  : 'Select a server',
-                              style: TextStyle(
-                                  color: AntarcticomTheme.textMuted,
-                                  fontSize: 13),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        )
-                      : channels.isLoading
+                    // Dynamic server list
+                    Expanded(
+                      child: servers.isLoading
                           ? const Center(
-                              child: CircularProgressIndicator(
-                                color: AntarcticomTheme.accentPrimary,
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AntarcticomTheme.accentPrimary,
+                                ),
                               ),
                             )
                           : ListView(
                               padding: const EdgeInsets.symmetric(
-                                vertical: AntarcticomTheme.spacingMd,
-                                horizontal: AntarcticomTheme.spacingSm,
-                              ),
-                              children: [
-                                if (channels.textChannels.isNotEmpty) ...[
-                                  _ChannelCategory(name: 'TEXT CHANNELS'),
-                                  ...channels.textChannels
-                                      .map((ch) => _ChannelItem(
-                                            name: ch.name,
-                                            icon: Icons.tag,
-                                            isActive:
-                                                selectedChannelId == ch.id,
-                                            onTap: () => _selectChannel(ch.id),
-                                          )),
-                                ],
-                                if (channels.voiceChannels.isNotEmpty) ...[
-                                  const SizedBox(
-                                      height: AntarcticomTheme.spacingMd),
-                                  _ChannelCategory(name: 'VOICE CHANNELS'),
-                                  ...channels.voiceChannels
-                                      .map((ch) => _ChannelItem(
-                                            name: ch.name,
-                                            icon: Icons.volume_up,
-                                            isVoice: true,
-                                            isActive:
-                                                selectedChannelId == ch.id,
-                                            onTap: () {},
-                                          )),
-                                ],
-                              ],
+                                  vertical: AntarcticomTheme.spacingXs),
+                              children: servers.servers.map((server) {
+                                return _ServerIcon(
+                                  label: server.initials,
+                                  color: settings.accentColor,
+                                  isSelected: selectedServerId == server.id,
+                                  onTap: () => _selectServer(server),
+                                );
+                              }).toList(),
                             ),
+                    ),
+                  ],
                 ),
+              ),
 
-                // User panel (bottom)
-                Container(
-                  height: 52,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AntarcticomTheme.spacingSm),
-                  color: AntarcticomTheme.bgDeepest.withValues(alpha: 0.5),
-                  child: Row(
-                    children: [
-                      // Avatar
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          gradient: AntarcticomTheme.accentGradient,
-                          borderRadius: BorderRadius.circular(
-                              AntarcticomTheme.radiusFull),
-                        ),
-                        child: Center(
-                          child: Text(
-                            user != null && user.displayName.isNotEmpty
-                                ? user.displayName[0].toUpperCase()
-                                : '?',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
+              // ─── Channel List (sidebar) ─────────────────────────────────
+              Container(
+                width: 240,
+                color: AntarcticomTheme.bgSecondary
+                    .withOpacity(settings.sidebarOpacity),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Server header
+                    Container(
+                      height: 48,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AntarcticomTheme.spacingMd),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: AntarcticomTheme.bgDeepest
+                                .withValues(alpha: 0.5),
                           ),
                         ),
                       ),
-                      const SizedBox(width: AntarcticomTheme.spacingSm),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              user?.displayName ?? 'User',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelMedium
-                                  ?.copyWith(
-                                      color: AntarcticomTheme.textPrimary,
-                                      fontWeight: FontWeight.w600),
-                            ),
-                            Text(
-                              'Online',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                      fontSize: 11,
-                                      color: AntarcticomTheme.online),
-                            ),
-                          ],
-                        ),
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        selectedServerId != null
+                            ? (servers.servers
+                                    .where((s) => s.id == selectedServerId)
+                                    .map((s) => s.name)
+                                    .firstOrNull ??
+                                'Server')
+                            : 'Direct Messages',
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelLarge
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      // Mic
-                      IconButton(
-                        icon: const Icon(Icons.mic, size: 18),
-                        color: AntarcticomTheme.textSecondary,
-                        onPressed: () {},
-                        splashRadius: 16,
-                      ),
-                      // Logout
-                      IconButton(
-                        icon: const Icon(Icons.logout, size: 18),
-                        color: AntarcticomTheme.textSecondary,
-                        onPressed: () async {
-                          await ref.read(authProvider.notifier).logout();
-                          if (context.mounted) context.go('/login');
-                        },
-                        splashRadius: 16,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+                    ),
 
-          // ─── Main Content Area ──────────────────────────────────────
-          Expanded(
-            child: widget.child,
+                    // Channel list
+                    Expanded(
+                      child: selectedServerId == null
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(
+                                    AntarcticomTheme.spacingMd),
+                                child: Text(
+                                  servers.servers.isEmpty
+                                      ? 'Create or join a server to get started!'
+                                      : 'Select a server',
+                                  style: TextStyle(
+                                      color: AntarcticomTheme.textMuted,
+                                      fontSize: 13),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            )
+                          : channels.isLoading
+                              ? const Center(
+                                  child: CircularProgressIndicator(
+                                    color: AntarcticomTheme.accentPrimary,
+                                  ),
+                                )
+                              : ListView(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: AntarcticomTheme.spacingMd,
+                                    horizontal: AntarcticomTheme.spacingSm,
+                                  ),
+                                  children: [
+                                    if (channels.textChannels.isNotEmpty) ...[
+                                      _ChannelCategory(name: 'TEXT CHANNELS'),
+                                      ...channels.textChannels
+                                          .map((ch) => _ChannelItem(
+                                                name: ch.name,
+                                                icon: Icons.tag,
+                                                isActive:
+                                                    selectedChannelId == ch.id,
+                                                onTap: () =>
+                                                    _selectChannel(ch.id),
+                                              )),
+                                    ],
+                                    if (channels.voiceChannels.isNotEmpty) ...[
+                                      const SizedBox(
+                                          height: AntarcticomTheme.spacingMd),
+                                      _ChannelCategory(name: 'VOICE CHANNELS'),
+                                      ...channels.voiceChannels
+                                          .map((ch) => _ChannelItem(
+                                                name: ch.name,
+                                                icon: Icons.volume_up,
+                                                isVoice: true,
+                                                isActive:
+                                                    selectedChannelId == ch.id,
+                                                onTap: () {},
+                                              )),
+                                    ],
+                                  ],
+                                ),
+                    ),
+
+                    // User panel (bottom)
+                    Container(
+                      height: 52,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AntarcticomTheme.spacingSm),
+                      color: AntarcticomTheme.bgDeepest.withValues(alpha: 0.5),
+                      child: Row(
+                        children: [
+                          // Avatar
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              gradient: AntarcticomTheme.accentGradient,
+                              borderRadius: BorderRadius.circular(
+                                  AntarcticomTheme.radiusFull),
+                            ),
+                            child: Center(
+                              child: Text(
+                                user != null && user.displayName.isNotEmpty
+                                    ? user.displayName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: AntarcticomTheme.spacingSm),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  user?.displayName ?? 'User',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelMedium
+                                      ?.copyWith(
+                                          color: AntarcticomTheme.textPrimary,
+                                          fontWeight: FontWeight.w600),
+                                ),
+                                Text(
+                                  'Online',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                          fontSize: 11,
+                                          color: AntarcticomTheme.online),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Settings
+                          IconButton(
+                            icon: const Icon(Icons.settings, size: 18),
+                            color: AntarcticomTheme.textSecondary,
+                            onPressed: () {
+                              context.go('/settings');
+                            },
+                            splashRadius: 16,
+                            tooltip: 'Settings',
+                          ),
+                          // Logout
+                          IconButton(
+                            icon: const Icon(Icons.logout, size: 18),
+                            color: AntarcticomTheme.textSecondary,
+                            onPressed: () async {
+                              await ref.read(authProvider.notifier).logout();
+                              if (context.mounted) context.go('/login');
+                            },
+                            splashRadius: 16,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ─── Main Content Area ──────────────────────────────────────
+              Expanded(
+                child: Container(
+                  color: AntarcticomTheme.bgPrimary
+                      .withOpacity(settings.backgroundOpacity),
+                  child: widget.child,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -320,7 +346,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 }
 
-// ─── Helper Widgets ───────────────────────────────────────────────────────
+// ─── Helper Widgets ─────────────────────────────────────────────────
 
 class _ServerIcon extends StatefulWidget {
   final String? label;

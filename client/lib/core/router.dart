@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/login_screen.dart';
 import '../features/auth/register_screen.dart';
+import '../features/settings/settings_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/chat/channel_screen.dart';
 import 'auth_provider.dart';
@@ -80,8 +81,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/settings',
             name: 'settings',
-            builder: (context, state) =>
-                const Center(child: Text('Settings — Coming soon')),
+            builder: (context, state) => const SettingsScreen(),
           ),
         ],
       ),
