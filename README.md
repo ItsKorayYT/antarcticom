@@ -6,7 +6,7 @@
 
 - 🚀 **Native performance** — Flutter + Rust, no Electron
 - 🔒 **End-to-end encryption** — Signal protocol for DMs and calls
-- 🎙️ **Ultra-low latency voice** — Opus over QUIC, 30–50ms target
+- 🎙️ **Ultra-low latency voice** — Opus over QUIC
 - 🏠 **Self-hosting** — Docker-first, one-command deploy
 - 🎨 **Premium UI** — GPU-accelerated, 120–240Hz, dark-first design
 
@@ -28,3 +28,4 @@
 ## License
 
 TBD
+
