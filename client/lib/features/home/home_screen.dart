@@ -65,8 +65,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return Container(
         width: vertical ? 80 : null,
         height: vertical ? null : 64,
-        color:
-            AntarcticomTheme.bgSecondary.withOpacity(settings.sidebarOpacity),
+        color: AntarcticomTheme.bgSecondary
+            .withValues(alpha: settings.sidebarOpacity),
         child: vertical
             ? Column(
                 children: [
@@ -98,8 +98,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Widget buildSidebar() {
       return Container(
         width: 240,
-        color:
-            AntarcticomTheme.bgSecondary.withOpacity(settings.sidebarOpacity),
+        color: AntarcticomTheme.bgSecondary
+            .withValues(alpha: settings.sidebarOpacity),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -301,7 +301,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       children: [
         if (channels.textChannels.isNotEmpty) ...[
-          _ChannelCategory(name: 'TEXT CHANNELS'),
+          const _ChannelCategory(name: 'TEXT CHANNELS'),
           ...channels.textChannels.map((ch) => _ChannelItem(
                 name: ch.name,
                 icon: Icons.tag,
@@ -311,7 +311,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
         if (channels.voiceChannels.isNotEmpty) ...[
           const SizedBox(height: AntarcticomTheme.spacingMd),
-          _ChannelCategory(name: 'VOICE CHANNELS'),
+          const _ChannelCategory(name: 'VOICE CHANNELS'),
           ...channels.voiceChannels.map((ch) => _ChannelItem(
                 name: ch.name,
                 icon: Icons.volume_up,
@@ -341,7 +341,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             servers.servers.isEmpty
                 ? 'Create or join a server to get started!'
                 : 'Select a server or direct message from the taskbar',
-            style: TextStyle(color: AntarcticomTheme.textMuted, fontSize: 14),
+            style: const TextStyle(
+                color: AntarcticomTheme.textMuted, fontSize: 14),
             textAlign: TextAlign.center,
           ),
         ],
@@ -355,7 +356,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       height: 52,
       padding:
           const EdgeInsets.symmetric(horizontal: AntarcticomTheme.spacingSm),
-      color: AntarcticomTheme.bgSecondary.withOpacity(settings.sidebarOpacity),
+      color: AntarcticomTheme.bgSecondary
+          .withValues(alpha: settings.sidebarOpacity),
       child: Row(
         children: [
           RainbowBuilder(
@@ -367,7 +369,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   decoration: BoxDecoration(
                     gradient: settings.rainbowMode
                         ? LinearGradient(
-                            colors: [color, color.withOpacity(0.7)])
+                            colors: [color, color.withValues(alpha: 0.7)])
                         : AntarcticomTheme.accentGradient,
                     borderRadius:
                         BorderRadius.circular(AntarcticomTheme.radiusFull),
@@ -395,15 +397,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Text(
                   user?.displayName ?? 'User',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: AntarcticomTheme.textPrimary,
-                      fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  'Online',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(fontSize: 11, color: AntarcticomTheme.online),
+                    color: AntarcticomTheme.textPrimary,
+                    shadows: const [
+                      Shadow(
+                        color: Color(0xCC000000),
+                        offset: Offset(0, 1),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -411,7 +413,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AntarcticomTheme.bgTertiary,
               shape: BoxShape.circle,
             ),
@@ -430,7 +432,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Container(
             width: 32,
             height: 32,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AntarcticomTheme.bgTertiary,
               shape: BoxShape.circle,
             ),
@@ -585,7 +587,8 @@ class _ChannelCategory extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(Icons.expand_more, size: 10, color: AntarcticomTheme.textMuted),
+          const Icon(Icons.expand_more,
+              size: 10, color: AntarcticomTheme.textMuted),
           const SizedBox(width: 4),
           Text(
             name,

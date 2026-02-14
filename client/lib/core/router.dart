@@ -52,23 +52,44 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/channels/@me',
             name: 'home',
-            builder: (context, state) => const Center(
-              child: Text(
-                'Welcome to Antarcticom!\nCreate or select a server to get started.',
-                style: TextStyle(fontSize: 16, color: Color(0xFF8E9297)),
-                textAlign: TextAlign.center,
+            pageBuilder: (context, state) => CustomTransitionPage(
+              key: state.pageKey,
+              child: const Center(
+                child: Text(
+                  'Welcome to Antarcticom!\nCreate or select a server to get started.',
+                  style: TextStyle(fontSize: 16, color: Color(0xFF8E9297)),
+                  textAlign: TextAlign.center,
+                ),
               ),
+              transitionsBuilder:
+                  (context, animation, secondaryAnimation, child) {
+                // Slide from Left (-1.0, 0.0) to (0.0, 0.0)
+                const begin = Offset(-1.0, 0.0);
+                const end = Offset.zero;
+                const curve = Curves.easeInOut;
+                var tween = Tween(begin: begin, end: end)
+                    .chain(CurveTween(curve: curve));
+                return SlideTransition(
+                    position: animation.drive(tween), child: child);
+              },
             ),
           ),
           GoRoute(
             path: '/channels/:serverId/:channelId',
             name: 'channel',
-            builder: (context, state) {
+            pageBuilder: (context, state) {
               final serverId = state.pathParameters['serverId']!;
               final channelId = state.pathParameters['channelId']!;
-              return ChannelScreen(
-                serverId: serverId,
-                channelId: channelId,
+              return CustomTransitionPage(
+                key: state.pageKey,
+                child: ChannelScreen(
+                  serverId: serverId,
+                  channelId: channelId,
+                ),
+                transitionsBuilder:
+                    (context, animation, secondaryAnimation, child) {
+                  return FadeTransition(opacity: animation, child: child);
+                },
               );
             },
           ),

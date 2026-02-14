@@ -111,12 +111,14 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.error_outline,
+                          const Icon(Icons.error_outline,
                               color: AntarcticomTheme.textMuted, size: 48),
                           const SizedBox(height: AntarcticomTheme.spacingSm),
-                          Text(msgState.error!,
-                              style:
-                                  TextStyle(color: AntarcticomTheme.textMuted)),
+                          Text(
+                            msgState.error!,
+                            style: const TextStyle(
+                                color: AntarcticomTheme.textMuted),
+                          ),
                           const SizedBox(height: AntarcticomTheme.spacingMd),
                           TextButton(
                             onPressed: () => ref
@@ -128,20 +130,19 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                       ),
                     )
                   : msgState.messages.isEmpty
-                      ? Center(
+                      ? const Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.chat_bubble_outline,
                                   color: AntarcticomTheme.textMuted, size: 48),
-                              const SizedBox(
-                                  height: AntarcticomTheme.spacingSm),
+                              SizedBox(height: AntarcticomTheme.spacingSm),
                               Text(
                                 'No messages yet',
                                 style: TextStyle(
                                     color: AntarcticomTheme.textMuted),
                               ),
-                              const SizedBox(height: 4),
+                              SizedBox(height: 4),
                               Text(
                                 'Be the first to say something!',
                                 style: TextStyle(
@@ -153,7 +154,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                         )
                       : Container(
                           color: AntarcticomTheme.bgPrimary
-                              .withOpacity(settings.backgroundOpacity),
+                              .withValues(alpha: settings.backgroundOpacity),
                           child: ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.symmetric(
@@ -179,15 +180,15 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
         Container(
           padding: const EdgeInsets.all(AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color:
-                AntarcticomTheme.bgPrimary.withOpacity(settings.sidebarOpacity),
+            color: AntarcticomTheme.bgPrimary
+                .withValues(alpha: settings.sidebarOpacity),
           ),
           child: Row(
             children: [
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: AntarcticomTheme.bgTertiary.withOpacity(0.8),
+                    color: AntarcticomTheme.bgTertiary.withValues(alpha: 0.8),
                     borderRadius:
                         BorderRadius.circular(AntarcticomTheme.radiusMd),
                   ),

@@ -54,7 +54,7 @@ class SettingsScreen extends ConsumerWidget {
                     padding: const EdgeInsets.all(AntarcticomTheme.spacingLg),
                     decoration: BoxDecoration(
                       color: AntarcticomTheme.bgSecondary
-                          .withOpacity(settings.sidebarOpacity),
+                          .withValues(alpha: settings.sidebarOpacity),
                       borderRadius:
                           BorderRadius.circular(AntarcticomTheme.radiusLg),
                     ),
@@ -74,9 +74,10 @@ class SettingsScreen extends ConsumerWidget {
                         const SizedBox(height: AntarcticomTheme.spacingLg),
 
                         // ─── Theme & Background ─────────────────────────────
-                        _SectionHeader('Theme & Background'),
+                        const _SectionHeader('Theme & Background'),
                         DropdownButtonFormField<AppBackgroundTheme>(
-                          value: settings.backgroundTheme,
+                          key: ValueKey(settings.backgroundTheme),
+                          initialValue: settings.backgroundTheme,
                           decoration: const InputDecoration(
                             labelText: 'Background Theme',
                             border: OutlineInputBorder(),
@@ -102,7 +103,7 @@ class SettingsScreen extends ConsumerWidget {
                         if (settings.backgroundTheme ==
                             AppBackgroundTheme.moon) ...[
                           const SizedBox(height: AntarcticomTheme.spacingMd),
-                          _SectionHeader('Moon Position'),
+                          const _SectionHeader('Moon Position'),
                           _SliderSetting(
                             label: 'Horizontal Position',
                             value: settings.moonX,
@@ -120,7 +121,7 @@ class SettingsScreen extends ConsumerWidget {
 
                         if (settings.backgroundTheme ==
                             AppBackgroundTheme.sun) ...[
-                          _SectionHeader('Sun Position'),
+                          const _SectionHeader('Sun Position'),
                           _SliderSetting(
                             label: 'Horizontal Position',
                             value: settings.sunX,
@@ -143,7 +144,7 @@ class SettingsScreen extends ConsumerWidget {
                                 AppBackgroundTheme.moon ||
                             settings.backgroundTheme ==
                                 AppBackgroundTheme.stars)
-                          _SectionHeader('Ambient Animations'),
+                          const _SectionHeader('Ambient Animations'),
 
                         if (settings.backgroundTheme == AppBackgroundTheme.sun)
                           SwitchListTile(
@@ -152,7 +153,6 @@ class SettingsScreen extends ConsumerWidget {
                                     color: AntarcticomTheme.textPrimary)),
                             value: settings.showBirds,
                             onChanged: (val) => notifier.toggleBirds(val),
-                            activeColor: Theme.of(context).colorScheme.primary,
                           ),
 
                         if (settings.backgroundTheme == AppBackgroundTheme.moon)
@@ -162,7 +162,6 @@ class SettingsScreen extends ConsumerWidget {
                                     color: AntarcticomTheme.textPrimary)),
                             value: settings.showOwls,
                             onChanged: (val) => notifier.toggleOwls(val),
-                            activeColor: Theme.of(context).colorScheme.primary,
                           ),
 
                         if (settings.backgroundTheme ==
@@ -176,14 +175,27 @@ class SettingsScreen extends ConsumerWidget {
                             value: settings.showShootingStars,
                             onChanged: (val) =>
                                 notifier.toggleShootingStars(val),
-                            activeColor: Theme.of(context).colorScheme.primary,
+                            activeTrackColor:
+                                Theme.of(context).colorScheme.primary,
+                          ),
+                        if (settings.showShootingStars &&
+                            (settings.backgroundTheme ==
+                                    AppBackgroundTheme.moon ||
+                                settings.backgroundTheme ==
+                                    AppBackgroundTheme.stars))
+                          _SliderSetting(
+                            label: 'Frequency (Rare → Frequent)',
+                            value: settings.shootingStarFrequency,
+                            onChanged: (val) =>
+                                notifier.setShootingStarFrequency(val),
                           ),
                         const SizedBox(height: AntarcticomTheme.spacingMd),
 
                         // ─── Layout ─────────────────────────────────────────
-                        _SectionHeader('Layout'),
+                        const _SectionHeader('Layout'),
                         DropdownButtonFormField<TaskbarPosition>(
-                          value: settings.taskbarPosition,
+                          key: ValueKey(settings.taskbarPosition),
+                          initialValue: settings.taskbarPosition,
                           decoration: const InputDecoration(
                             labelText: 'Taskbar Position',
                             border: OutlineInputBorder(),
@@ -208,7 +220,7 @@ class SettingsScreen extends ConsumerWidget {
                         const SizedBox(height: AntarcticomTheme.spacingMd),
 
                         // ─── Opacity ────────────────────────────────────────
-                        _SectionHeader('Transparency'),
+                        const _SectionHeader('Transparency'),
                         _SliderSetting(
                           label: 'Sidebar / Taskbar Opacity',
                           value: settings.sidebarOpacity,
@@ -224,7 +236,7 @@ class SettingsScreen extends ConsumerWidget {
                         const SizedBox(height: AntarcticomTheme.spacingMd),
 
                         // ─── Accent Color ───────────────────────────────────
-                        _SectionHeader('Accent Color'),
+                        const _SectionHeader('Accent Color'),
                         const SizedBox(height: AntarcticomTheme.spacingSm),
                         Row(
                           children: [
@@ -239,7 +251,7 @@ class SettingsScreen extends ConsumerWidget {
                                     value: settings.rainbowMode,
                                     onChanged: (val) =>
                                         notifier.setRainbowMode(val),
-                                    activeColor: color,
+                                    activeTrackColor: color,
                                   );
                                 }),
                           ],
@@ -321,29 +333,33 @@ class SettingsScreen extends ConsumerWidget {
                                   children: [
                                     _ColorSwatch(
                                       color: const Color(0xFF6C5CE7),
-                                      isSelected: settings.accentColor.value ==
-                                          0xFF6C5CE7,
+                                      isSelected:
+                                          settings.accentColor.toARGB32() ==
+                                              0xFF6C5CE7,
                                       onTap: () => notifier.setAccentColor(
                                           const Color(0xFF6C5CE7)),
                                     ),
                                     _ColorSwatch(
                                       color: const Color(0xFF00D2FF),
-                                      isSelected: settings.accentColor.value ==
-                                          0xFF00D2FF,
+                                      isSelected:
+                                          settings.accentColor.toARGB32() ==
+                                              0xFF00D2FF,
                                       onTap: () => notifier.setAccentColor(
                                           const Color(0xFF00D2FF)),
                                     ),
                                     _ColorSwatch(
                                       color: const Color(0xFF00E676),
-                                      isSelected: settings.accentColor.value ==
-                                          0xFF00E676,
+                                      isSelected:
+                                          settings.accentColor.toARGB32() ==
+                                              0xFF00E676,
                                       onTap: () => notifier.setAccentColor(
                                           const Color(0xFF00E676)),
                                     ),
                                     _ColorSwatch(
                                       color: const Color(0xFFFF1744),
-                                      isSelected: settings.accentColor.value ==
-                                          0xFFFF1744,
+                                      isSelected:
+                                          settings.accentColor.toARGB32() ==
+                                              0xFFFF1744,
                                       onTap: () => notifier.setAccentColor(
                                           const Color(0xFFFF1744)),
                                     ),

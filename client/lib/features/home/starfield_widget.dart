@@ -1,8 +1,11 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/settings_provider.dart';
+import 'shooting_star_widget.dart';
 
-class StarfieldWidget extends StatefulWidget {
+class StarfieldWidget extends ConsumerStatefulWidget {
   final double density;
   final double opacity;
 
@@ -13,10 +16,10 @@ class StarfieldWidget extends StatefulWidget {
   });
 
   @override
-  State<StarfieldWidget> createState() => _StarfieldWidgetState();
+  ConsumerState<StarfieldWidget> createState() => _StarfieldWidgetState();
 }
 
-class _StarfieldWidgetState extends State<StarfieldWidget>
+class _StarfieldWidgetState extends ConsumerState<StarfieldWidget>
     with SingleTickerProviderStateMixin {
   late Ticker _ticker;
   late List<_Star> _stars;
@@ -52,6 +55,7 @@ class _StarfieldWidgetState extends State<StarfieldWidget>
   }
 
   void _updateStars(double dt) {
+    if (!mounted) return;
     setState(() {
       for (var star in _stars) {
         // Move upwards
@@ -81,9 +85,17 @@ class _StarfieldWidgetState extends State<StarfieldWidget>
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: _StarPainter(_stars, widget.opacity),
-      size: Size.infinite,
+    final settings = ref.watch(settingsProvider);
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CustomPaint(
+          painter: _StarPainter(_stars, widget.opacity),
+          size: Size.infinite,
+        ),
+        if (settings.showShootingStars) const ShootingStarWidget(),
+      ],
     );
   }
 }

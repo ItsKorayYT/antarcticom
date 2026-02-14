@@ -36,7 +36,7 @@ class AntarcticomApp extends ConsumerWidget {
         ),
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
-            TargetPlatform.windows: const FadePageTransitionsBuilder(),
+            TargetPlatform.windows: FadePageTransitionsBuilder(),
           },
         ),
       ),

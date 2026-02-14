@@ -114,13 +114,13 @@ class AntarcticomTheme {
                 ),
               ],
             ),
-            headlineMedium: TextStyle(
+            headlineMedium: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w600,
               color: textPrimary,
               letterSpacing: -0.3,
             ),
-            headlineSmall: TextStyle(
+            headlineSmall: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: textPrimary,
@@ -140,13 +140,13 @@ class AntarcticomTheme {
                 ),
               ],
             ),
-            bodyMedium: TextStyle(
+            bodyMedium: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,
               color: textSecondary,
               height: 1.5,
             ),
-            bodySmall: TextStyle(
+            bodySmall: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w400,
               color: textMuted,
@@ -166,7 +166,7 @@ class AntarcticomTheme {
                 ),
               ],
             ),
-            labelMedium: TextStyle(
+            labelMedium: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: textSecondary,

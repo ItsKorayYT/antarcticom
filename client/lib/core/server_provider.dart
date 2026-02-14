@@ -72,14 +72,11 @@ class ServersNotifier extends StateNotifier<ServersState> {
     state = const ServersState(isLoading: true);
     try {
       final data = await _api.listServers();
-      print('DEBUG: Fetched raw servers: $data');
       final servers = data
           .map((e) => ServerInfo.fromJson(e as Map<String, dynamic>))
           .toList();
       state = ServersState(servers: servers);
-      print('DEBUG: Parsed ${servers.length} servers');
-    } catch (e, st) {
-      print('DEBUG: Failed to fetch servers: $e\n$st');
+    } catch (e) {
       state = const ServersState(error: 'Failed to load servers');
     }
   }

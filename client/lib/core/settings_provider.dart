@@ -33,6 +33,7 @@ class AppSettings {
     this.showBirds = true,
     this.showOwls = true,
     this.showShootingStars = true,
+    this.shootingStarFrequency = 0.5,
   });
 
   final bool rainbowMode;
@@ -43,6 +44,7 @@ class AppSettings {
   final bool showBirds;
   final bool showOwls;
   final bool showShootingStars;
+  final double shootingStarFrequency; // 0.0 (Rare) to 1.0 (Frequent)
 
   AppSettings copyWith({
     double? sidebarOpacity,
@@ -60,6 +62,7 @@ class AppSettings {
     bool? showBirds,
     bool? showOwls,
     bool? showShootingStars,
+    double? shootingStarFrequency,
   }) {
     return AppSettings(
       sidebarOpacity: sidebarOpacity ?? this.sidebarOpacity,
@@ -77,6 +80,8 @@ class AppSettings {
       showBirds: showBirds ?? this.showBirds,
       showOwls: showOwls ?? this.showOwls,
       showShootingStars: showShootingStars ?? this.showShootingStars,
+      shootingStarFrequency:
+          shootingStarFrequency ?? this.shootingStarFrequency,
     );
   }
 }
@@ -100,6 +105,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   static const _keyShowBirds = 'show_birds';
   static const _keyShowOwls = 'show_owls';
   static const _keyShowShootingStars = 'show_shooting_stars';
+  static const _keyShootingStarFreq = 'shooting_star_freq';
 
   Future<void> setMoonPosition(double x, double y) async {
     state = state.copyWith(moonX: x, moonY: y);
@@ -133,6 +139,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     await prefs.setBool(_keyShowShootingStars, value);
   }
 
+  Future<void> setShootingStarFrequency(double value) async {
+    state = state.copyWith(shootingStarFrequency: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyShootingStarFreq, value);
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final sidebarOpacity = prefs.getDouble(_keySidebarOpacity) ?? 0.85;
@@ -152,6 +164,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final birds = prefs.getBool(_keyShowBirds) ?? true;
     final owls = prefs.getBool(_keyShowOwls) ?? true;
     final stars = prefs.getBool(_keyShowShootingStars) ?? true;
+    final starFreq = prefs.getDouble(_keyShootingStarFreq) ?? 0.5;
 
     state = AppSettings(
       sidebarOpacity: sidebarOpacity,
@@ -172,6 +185,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       showBirds: birds,
       showOwls: owls,
       showShootingStars: stars,
+      shootingStarFrequency: starFreq,
     );
   }
 
@@ -190,7 +204,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   Future<void> setAccentColor(Color value) async {
     state = state.copyWith(accentColor: value);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt(_keyAccentColor, value.value);
+    await prefs.setInt(_keyAccentColor, value.toARGB32());
   }
 
   Future<void> toggleStarfield(bool value) async {

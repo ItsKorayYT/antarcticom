@@ -63,16 +63,12 @@ class ChannelsNotifier extends StateNotifier<ChannelsState> {
   Future<void> fetchChannels(String serverId) async {
     state = const ChannelsState(isLoading: true);
     try {
-      print('DEBUG: Fetching channels for server $serverId');
       final data = await _api.listChannels(serverId);
-      print('DEBUG: Fetched raw channels: $data');
       final channels = data
           .map((e) => ChannelInfo.fromJson(e as Map<String, dynamic>))
           .toList();
       state = ChannelsState(channels: channels);
-      print('DEBUG: Parsed ${channels.length} channels');
-    } catch (e, st) {
-      print('DEBUG: Failed to fetch channels: $e\n$st');
+    } catch (e) {
       state = const ChannelsState(error: 'Failed to load channels');
     }
   }

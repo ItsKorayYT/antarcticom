@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/settings_provider.dart';
+import 'shooting_star_widget.dart';
 
 // ─── Sun Theme ───────────────────────────────────────────────────────────────
 
@@ -71,10 +72,10 @@ class _SunThemeWidgetState extends ConsumerState<SunThemeWidget>
                 height: 120,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: RadialGradient(
+                  gradient: const RadialGradient(
                     colors: [
-                      const Color(0xFFFFE082),
-                      const Color(0xFFFFCA28),
+                      Color(0xFFFFE082),
+                      Color(0xFFFFCA28),
                     ],
                   ),
                   boxShadow: [
@@ -170,16 +171,27 @@ class _BirdAnimationWidget extends StatefulWidget {
 }
 
 class _BirdAnimationWidgetState extends State<_BirdAnimationWidget>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _controller;
-  // Use a list of birds with diff speeds later? For now just one flock or single bird.
+  final List<_Bird> _birds = [];
+  final math.Random _rng = math.Random();
 
   @override
   void initState() {
     super.initState();
     _controller =
-        AnimationController(vsync: this, duration: const Duration(seconds: 15))
+        AnimationController(vsync: this, duration: const Duration(seconds: 20))
           ..repeat();
+
+    // Spawn a flock
+    for (int i = 0; i < 3; i++) {
+      _birds.add(_Bird(
+        yOffset: _rng.nextDouble() * 0.2 + (i * 0.05),
+        speed: 0.8 + _rng.nextDouble() * 0.4,
+        delay: i * 0.5,
+        size: 10 + _rng.nextDouble() * 10,
+      ));
+    }
   }
 
   @override
@@ -193,21 +205,81 @@ class _BirdAnimationWidgetState extends State<_BirdAnimationWidget>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        // Linear movement across screen
-        final x = (_controller.value * 1.2) - 0.1; // -0.1 to 1.1
-        final y = 0.2 + math.sin(_controller.value * math.pi * 2) * 0.05;
+        return Stack(
+          children: _birds.map((bird) {
+            // Calculate individual position
+            double t = (_controller.value * bird.speed + bird.delay) % 1.0;
 
-        // Don't render if off screen significantly
-        if (x < -0.1 || x > 1.1) return const SizedBox();
+            // Linear movement right to left or left to right?
+            // Let's go Left -> Right for sun theme usually.
+            // Code had: final x = (_controller.value * 1.2) - 0.1;
 
-        return Positioned(
-          left: MediaQuery.of(context).size.width * x,
-          top: MediaQuery.of(context).size.height * y,
-          child: const Icon(Icons.flight, color: Colors.black12, size: 24),
+            final x = (t * 1.4) - 0.2; // -0.2 to 1.2
+            final y = bird.yOffset + math.sin(t * math.pi * 2) * 0.05;
+
+            if (x < -0.2 || x > 1.2) return const SizedBox();
+
+            return Positioned(
+              left: MediaQuery.of(context).size.width * x,
+              top: MediaQuery.of(context).size.height * y,
+              child: CustomPaint(
+                painter: _BirdPainter(
+                  flightProgress: t * 20, // Flapping speed
+                  color: Colors.black.withValues(alpha: 0.8),
+                ),
+                size: Size(bird.size * 1.5, bird.size * 0.75),
+              ),
+            );
+          }).toList(),
         );
       },
     );
   }
+}
+
+class _Bird {
+  final double yOffset;
+  final double speed;
+  final double delay;
+  final double size;
+  _Bird(
+      {required this.yOffset,
+      required this.speed,
+      required this.delay,
+      required this.size});
+}
+
+class _BirdPainter extends CustomPainter {
+  final double flightProgress;
+  final Color color;
+
+  _BirdPainter({required this.flightProgress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+
+    final path = Path();
+    final w = size.width;
+    final h = size.height;
+
+    // Flapping wing calculation
+    final wingY = math.sin(flightProgress) * h * 0.5;
+
+    path.moveTo(0, h / 2 - wingY); // Left wing tip
+    path.quadraticBezierTo(
+        w * 0.25, h / 2, w * 0.5, h / 2 + h * 0.2); // Body center
+    path.quadraticBezierTo(w * 0.75, h / 2, w, h / 2 - wingY); // Right wing tip
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(_BirdPainter old) => true;
 }
 
 // ─── Moon Theme ─────────────────────────────────────────────────────────────
@@ -247,8 +319,7 @@ class _MoonThemeWidgetState extends ConsumerState<MoonThemeWidget> {
         const Positioned.fill(child: _SimpleTwinklingStars()),
 
         // Shooting Stars (re-used for night)
-        if (settings.showShootingStars)
-          const Positioned.fill(child: _ShootingStarWidget()),
+        if (settings.showShootingStars) const ShootingStarWidget(),
 
         // The Moon
         Positioned(
@@ -373,74 +444,40 @@ class _OwlAnimationWidget extends StatefulWidget {
 class _OwlAnimationWidgetState extends State<_OwlAnimationWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+  bool _isVisible = false;
+  double _randomY = 0.2;
 
   @override
   void initState() {
     super.initState();
     _controller =
-        AnimationController(vsync: this, duration: const Duration(seconds: 20))
-          ..repeat();
+        AnimationController(vsync: this, duration: const Duration(seconds: 15));
+
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        setState(() => _isVisible = false);
+        _scheduleOwl();
+      }
+    });
+
+    // Start with a delay
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scheduleOwl());
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-        animation: _controller,
-        builder: (context, child) {
-          // Fly from right to left
-          final x = 1.2 - (_controller.value * 1.4);
-          if (x < -0.2 || x > 1.2) return const SizedBox();
-
-          return Positioned(
-            left: MediaQuery.of(context).size.width * x,
-            top: MediaQuery.of(context).size.height * 0.15 +
-                math.sin(_controller.value * 10) * 20,
-            child: Opacity(
-                opacity: 0.6,
-                child: Icon(Icons.flutter_dash, color: Colors.black, size: 32)),
-          );
-        });
-  }
-}
-
-class _ShootingStarWidget extends StatefulWidget {
-  const _ShootingStarWidget();
-  @override
-  State<_ShootingStarWidget> createState() => _ShootingStarWidgetState();
-}
-
-class _ShootingStarWidgetState extends State<_ShootingStarWidget>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  // Initialize off-screen to prevent flash
-  double _startX = -1.0;
-  double _startY = -1.0;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller =
-        AnimationController(vsync: this, duration: const Duration(seconds: 2));
-    _scheduleNextStar();
-  }
-
-  void _scheduleNextStar() {
+  void _scheduleOwl() {
     if (!mounted) return;
-    final delay = math.Random().nextInt(10) + 5; // 5-15 seconds delay
+    final rng = math.Random();
+    // Owl appears more frequently: 5-20 seconds delay
+    final delay = rng.nextInt(15) + 5;
+
     Future.delayed(Duration(seconds: delay), () {
       if (!mounted) return;
-      // Set position just before starting animation
       setState(() {
-        _startX = math.Random().nextDouble();
-        _startY = math.Random().nextDouble() * 0.5;
+        _isVisible = true;
+        _randomY =
+            0.1 + rng.nextDouble() * 0.4; // Random Y position (10% to 50%)
       });
-      _controller.forward(from: 0).then((_) => _scheduleNextStar());
+      _controller.forward(from: 0.0);
     });
   }
 
@@ -455,33 +492,32 @@ class _ShootingStarWidgetState extends State<_ShootingStarWidget>
     return AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
-          // Double check to ensure we don't render if off-screen or not animating
-          if (_controller.value == 0 || _controller.value == 1 || _startX < 0)
-            return const SizedBox();
+          if (!_isVisible) return const SizedBox();
 
-          final progress = _controller.value;
-          // Move casually down-left
-          final currentX = _startX - (progress * 0.3);
-          final currentY = _startY + (progress * 0.3);
+          // Fly from right to left (linear)
+          final x = 1.2 - (_controller.value * 1.4);
 
-          return Positioned(
-            left: MediaQuery.of(context).size.width * currentX,
-            top: MediaQuery.of(context).size.height * currentY,
-            child: Opacity(
-              opacity: 1.0 - progress, // Fade out
-              child: Container(
-                width: 100 * (1.0 - progress),
-                height: 2,
-                decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                        colors: [Colors.white, Colors.transparent]),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.white, blurRadius: 4, spreadRadius: 1)
-                    ]),
-                transform: Matrix4.rotationZ(0.785), // 45 degrees
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Positioned(
+                left: MediaQuery.of(context).size.width * x,
+                // Use randomized Y
+                top: MediaQuery.of(context).size.height * _randomY +
+                    math.sin(_controller.value * 10) * 10,
+                child: Transform.scale(
+                  scaleX: -1, // Face left
+                  child: CustomPaint(
+                    painter: _BirdPainter(
+                      flightProgress: _controller.value * 20,
+                      // Owl is Grey (Night Bird)
+                      color: Colors.grey.withValues(alpha: 0.9),
+                    ),
+                    size: const Size(60, 40), // Larger than normal birds
+                  ),
+                ),
               ),
-            ),
+            ],
           );
         });
   }
@@ -572,7 +608,7 @@ class _GrassPainter extends CustomPainter {
           .withValues(alpha: 0.8);
 
       final layerOffset = layer * 40.0;
-      final bladeCount = 100;
+      const bladeCount = 100;
       final widthPerBlade = size.width / bladeCount;
 
       final path = Path();

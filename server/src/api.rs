@@ -379,6 +379,32 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
     let (tx, mut rx) = broadcast::channel::<String>(256);
     state.ws_sessions.insert(user_id, tx);
 
+    // Subscribe user to all channels they have access to
+    let mut subscribed_channels = Vec::new();
+
+    // 1. Get all servers the user is a member of
+    if let Ok(servers) = db::servers::list_for_user(&state.db, user_id).await {
+        for server in servers {
+            // 2. Get all channels for each server
+            if let Ok(channels) = db::channels::list_for_server(&state.db, server.id).await {
+                for channel in channels {
+                    subscribed_channels.push(channel.id);
+                    state
+                        .channel_subs
+                        .entry(channel.id)
+                        .or_default()
+                        .push(user_id);
+                }
+            }
+        }
+    }
+
+    tracing::info!(
+        "User {} connected, subscribed to {} channels",
+        user_id,
+        subscribed_channels.len()
+    );
+
     // Send Ready event
     let ready = WsEvent::Ready {
         user: UserPublic {
@@ -397,7 +423,11 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
     let mut send_socket = socket;
     let forward_handle = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
-            if send_socket.send(WsMessage::Text(msg.into())).await.is_err() {
+            if send_socket
+                .send(WsMessage::Text(msg.into()))
+                .await
+                .is_err()
+            {
                 break;
             }
         }
@@ -406,6 +436,14 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
     // Cleanup on disconnect
     forward_handle.await.ok();
     state.ws_sessions.remove(&user_id);
+
+    // Unsubscribe from channels
+    for channel_id in subscribed_channels {
+        if let Some(mut subs) = state.channel_subs.get_mut(&channel_id) {
+            subs.retain(|&id| id != user_id);
+        }
+    }
+
     tracing::info!("WebSocket disconnected: {}", user_id);
 }
 
