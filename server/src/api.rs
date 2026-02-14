@@ -133,10 +133,8 @@ pub fn build_router(state: AppState) -> Router {
         // Roles
         .route("/api/servers/:server_id/roles", get(list_roles))
         .route("/api/servers/:server_id/roles", post(create_role))
-        .route("/api/servers/:server_id/roles", post(create_role))
         .route("/api/servers/:server_id/roles/:role_id", delete(delete_role).patch(update_role))
         .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::put(assign_role))
-        .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::delete(remove_role))
         .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::delete(remove_role))
         .route("/api/servers/:server_id/members", get(list_members))
         .route("/api/servers/:server_id/members/:user_id", get(get_member))
