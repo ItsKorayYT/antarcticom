@@ -616,8 +616,8 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
     state.ws_sessions.remove(&user_id);
 
     // Unsubscribe from channels
-    for channel_id in subscribed_channels {
-        if let Some(mut subs) = state.channel_subs.get_mut(&channel_id) {
+    for channel_id in &subscribed_channels {
+        if let Some(mut subs) = state.channel_subs.get_mut(channel_id) {
             subs.retain(|&id| id != user_id);
         }
     }
