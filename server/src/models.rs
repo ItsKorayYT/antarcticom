@@ -112,6 +112,8 @@ pub struct Message {
     pub created_at: DateTime<Utc>,
     pub edited_at: Option<DateTime<Utc>>,
     pub reply_to_id: Option<i64>,
+    #[sqlx(skip)]
+    pub author: Option<UserPublic>,
 }
 
 #[derive(Debug, Deserialize)]

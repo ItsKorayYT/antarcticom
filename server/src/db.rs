@@ -40,7 +40,7 @@ pub mod users {
     }
 
     pub async fn find_by_username(pool: &PgPool, username: &str) -> AppResult<Option<User>> {
-        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1")
+        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE LOWER(username) = LOWER($1)")
             .bind(username)
             .fetch_optional(pool)
             .await?;
@@ -223,6 +223,12 @@ pub mod messages {
         .bind(reply_to_id)
         .fetch_one(pool)
         .await?;
+
+        // Fetch author details
+        let author = super::users::find_by_id(pool, author_id).await?.map(|u| u.into());
+        let mut message = message;
+        message.author = author;
+
         Ok(message)
     }
 
@@ -232,34 +238,67 @@ pub mod messages {
         before: Option<i64>,
         limit: i64,
     ) -> AppResult<Vec<Message>> {
-        let messages = if let Some(before_id) = before {
-            sqlx::query_as::<_, Message>(
-                r#"
-                SELECT * FROM messages
-                WHERE channel_id = $1 AND id < $2
-                ORDER BY id DESC
-                LIMIT $3
-                "#,
-            )
-            .bind(channel_id)
-            .bind(before_id)
-            .bind(limit)
-            .fetch_all(pool)
-            .await?
+        let query_str = if before.is_some() {
+            r#"
+            SELECT m.*, u.username, u.display_name, u.avatar_hash
+            FROM messages m
+            JOIN users u ON m.author_id = u.id
+            WHERE m.channel_id = $1 AND m.id < $2
+            ORDER BY m.id DESC
+            LIMIT $3
+            "#
         } else {
-            sqlx::query_as::<_, Message>(
-                r#"
-                SELECT * FROM messages
-                WHERE channel_id = $1
-                ORDER BY id DESC
-                LIMIT $2
-                "#,
-            )
-            .bind(channel_id)
-            .bind(limit)
-            .fetch_all(pool)
-            .await?
+            r#"
+            SELECT m.*, u.username, u.display_name, u.avatar_hash
+            FROM messages m
+            JOIN users u ON m.author_id = u.id
+            WHERE m.channel_id = $1
+            ORDER BY m.id DESC
+            LIMIT $2
+            "#
         };
+
+        let rows = if let Some(before_id) = before {
+            sqlx::query(query_str)
+                .bind(channel_id)
+                .bind(before_id)
+                .bind(limit)
+                .fetch_all(pool)
+                .await?
+        } else {
+            sqlx::query(query_str)
+                .bind(channel_id)
+                .bind(limit)
+                .fetch_all(pool)
+                .await?
+        };
+
+        let messages = rows
+            .into_iter()
+            .map(|row| {
+                use sqlx::Row;
+                use crate::models::UserPublic;
+
+                let mut msg = Message {
+                    id: row.get("id"),
+                    channel_id: row.get("channel_id"),
+                    author_id: row.get("author_id"),
+                    content: row.get("content"),
+                    nonce: row.get("nonce"),
+                    created_at: row.get("created_at"),
+                    edited_at: row.get("edited_at"),
+                    reply_to_id: row.get("reply_to_id"),
+                    author: Some(UserPublic {
+                        id: row.get("author_id"),
+                        username: row.get("username"),
+                        display_name: row.get("display_name"),
+                        avatar_hash: row.get("avatar_hash"),
+                    }),
+                };
+                msg
+            })
+            .collect();
+
         Ok(messages)
     }
 

@@ -169,7 +169,8 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                                 isOwn: isOwn,
                                 authorName: isOwn
                                     ? (auth.user?.displayName ?? 'You')
-                                    : msg.authorId.substring(0, 8),
+                                    : (msg.author?.displayName ??
+                                        msg.authorId.substring(0, 8)),
                               );
                             },
                           ),
