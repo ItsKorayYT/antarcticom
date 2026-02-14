@@ -7,7 +7,7 @@ use axum::extract::{FromRequestParts, Path, Query, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum::response::IntoResponse;
-use axum::routing::{get, post, delete, patch};
+use axum::routing::{get, post, delete};
 use axum::{Json, Router};
 use dashmap::DashMap;
 use serde::Deserialize;
@@ -638,8 +638,8 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
     // However, we just cleared local `subscribed_channels` from global map.
     // But we still have the list in `subscribed_channels` local variable!
     
-    for channel_id in subscribed_channels {
-        state.broadcast_to_channel(&channel_id, &presence_update);
+    for channel_id in &subscribed_channels {
+        state.broadcast_to_channel(channel_id, &presence_update);
     }
 }
 

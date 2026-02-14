@@ -279,7 +279,7 @@ pub mod messages {
                 use sqlx::Row;
                 use crate::models::UserPublic;
 
-                let mut msg = Message {
+                let msg = Message {
                     id: row.get("id"),
                     channel_id: row.get("channel_id"),
                     author_id: row.get("author_id"),
@@ -406,6 +406,7 @@ pub mod members {
                     display_name: row.get("display_name"),
                     avatar_hash: row.get("avatar_hash"),
                 }),
+                status: None,
             }
         });
         Ok(member)
@@ -447,6 +448,7 @@ pub mod members {
                         display_name: row.get("display_name"),
                         avatar_hash: row.get("avatar_hash"),
                     }),
+                    status: None,
                 }
             })
             .collect();
