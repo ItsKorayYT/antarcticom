@@ -32,7 +32,7 @@ class AppSettings {
     this.sunY = 0.2,
     this.showBirds = true,
     this.showOwls = true,
-    this.showShootingStars = true,
+    this.showShootingStars = false,
     this.shootingStarFrequency = 0.5,
   });
 
@@ -163,7 +163,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final sY = prefs.getDouble(_keySunY) ?? 0.2;
     final birds = prefs.getBool(_keyShowBirds) ?? true;
     final owls = prefs.getBool(_keyShowOwls) ?? true;
-    final stars = prefs.getBool(_keyShowShootingStars) ?? true;
+    final stars = prefs.getBool(_keyShowShootingStars) ?? false;
     final starFreq = prefs.getDouble(_keyShootingStarFreq) ?? 0.5;
 
     state = AppSettings(
