@@ -73,6 +73,16 @@ class ChannelsNotifier extends StateNotifier<ChannelsState> {
     }
   }
 
+  Future<void> createChannel(String serverId, String name, String type) async {
+    try {
+      final data = await _api.createChannel(serverId, name, type);
+      final channel = ChannelInfo.fromJson(data);
+      state = ChannelsState(channels: [...state.channels, channel]);
+    } catch (_) {
+      // Handle error
+    }
+  }
+
   void clear() {
     state = const ChannelsState();
   }

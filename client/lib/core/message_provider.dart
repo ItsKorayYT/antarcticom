@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_service.dart';
 import 'socket_service.dart';
-import 'auth_provider.dart';
+import 'models/user.dart';
 
 // ─── Message Model ──────────────────────────────────────────────────────
 
@@ -12,7 +12,7 @@ class MessageInfo {
   final String content;
   final String createdAt;
   final String? editedAt;
-  final UserInfo? author;
+  final User? author;
 
   const MessageInfo({
     required this.id,
@@ -33,7 +33,7 @@ class MessageInfo {
       createdAt: json['created_at'] as String,
       editedAt: json['edited_at'] as String?,
       author: json['author'] != null
-          ? UserInfo.fromJson(json['author'] as Map<String, dynamic>)
+          ? User.fromJson(json['author'] as Map<String, dynamic>)
           : null,
     );
   }

@@ -62,11 +62,88 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  // ─── Roles ──────────────────────────────────────────────────────────
+
+  Future<List<dynamic>> listRoles(String serverId) async {
+    final response = await _dio.get('/api/servers/$serverId/roles');
+    return response.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createRole(
+    String serverId,
+    String name,
+    int permissions,
+    int color,
+    int position,
+  ) async {
+    final response = await _dio.post(
+      '/api/servers/$serverId/roles',
+      data: {
+        'name': name,
+        'permissions': permissions,
+        'color': color,
+        'position': position,
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateRole(
+    String serverId,
+    String roleId,
+    String name,
+    int permissions,
+    int color,
+    int position,
+  ) async {
+    final response = await _dio.patch(
+      '/api/servers/$serverId/roles/$roleId',
+      data: {
+        'name': name,
+        'permissions': permissions,
+        'color': color,
+        'position': position,
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<void> deleteRole(String serverId, String roleId) async {
+    await _dio.delete('/api/servers/$serverId/roles/$roleId');
+  }
+
+  Future<void> assignRole(String serverId, String userId, String roleId) async {
+    await _dio.put('/api/servers/$serverId/members/$userId/roles/$roleId');
+  }
+
+  Future<void> removeRole(String serverId, String userId, String roleId) async {
+    await _dio.delete('/api/servers/$serverId/members/$userId/roles/$roleId');
+  }
+
+  Future<List<dynamic>> getMembers(String serverId) async {
+    final response = await _dio.get('/api/servers/$serverId/members');
+    return response.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMember(String serverId, String userId) async {
+    final response = await _dio.get('/api/servers/$serverId/members/$userId');
+    return response.data as Map<String, dynamic>;
+  }
+
   // ─── Channels ───────────────────────────────────────────────────────
 
   Future<List<dynamic>> listChannels(String serverId) async {
     final response = await _dio.get('/api/servers/$serverId/channels');
     return response.data as List<dynamic>;
+  }
+
+  Future<Map<String, dynamic>> createChannel(
+      String serverId, String name, String type) async {
+    final response = await _dio.post(
+      '/api/servers/$serverId/channels',
+      data: {'name': name, 'type': type},
+    );
+    return response.data as Map<String, dynamic>;
   }
 
   // ─── Messages ───────────────────────────────────────────────────────

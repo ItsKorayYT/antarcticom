@@ -3,38 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'socket_service.dart';
-
-// ─── User Model ─────────────────────────────────────────────────────────
-
-class UserInfo {
-  final String id;
-  final String username;
-  final String displayName;
-  final String? avatarHash;
-
-  const UserInfo({
-    required this.id,
-    required this.username,
-    required this.displayName,
-    this.avatarHash,
-  });
-
-  factory UserInfo.fromJson(Map<String, dynamic> json) {
-    return UserInfo(
-      id: json['id'] as String,
-      username: json['username'] as String,
-      displayName: json['display_name'] as String,
-      avatarHash: json['avatar_hash'] as String?,
-    );
-  }
-}
+import 'models/user.dart';
 
 // ─── Auth State ─────────────────────────────────────────────────────────
 
 class AuthState {
   final bool isLoading;
   final bool isAuthenticated;
-  final UserInfo? user;
+  final User? user;
   final String? token;
   final String? error;
 
@@ -49,7 +25,7 @@ class AuthState {
   AuthState copyWith({
     bool? isLoading,
     bool? isAuthenticated,
-    UserInfo? user,
+    User? user,
     String? token,
     String? error,
   }) {
@@ -90,7 +66,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = AuthState(
           isAuthenticated: true,
           token: token,
-          user: UserInfo(
+          user: User(
             id: userId,
             username: username,
             displayName: displayName ?? username,
@@ -110,7 +86,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     try {
       final data = await _api.login(username, password);
       final token = data['token'] as String;
-      final user = UserInfo.fromJson(data['user'] as Map<String, dynamic>);
+      final user = User.fromJson(data['user'] as Map<String, dynamic>);
 
       _api.setToken(token);
       _socket.connect(token);
@@ -143,7 +119,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         displayName: displayName,
       );
       final token = data['token'] as String;
-      final user = UserInfo.fromJson(data['user'] as Map<String, dynamic>);
+      final user = User.fromJson(data['user'] as Map<String, dynamic>);
 
       _api.setToken(token);
       _socket.connect(token);
@@ -171,7 +147,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     state = const AuthState();
   }
 
-  Future<void> _saveSession(String token, UserInfo user) async {
+  Future<void> _saveSession(String token, User user) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
     await prefs.setString('user_id', user.id);

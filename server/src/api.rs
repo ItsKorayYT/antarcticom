@@ -7,7 +7,7 @@ use axum::extract::{FromRequestParts, Path, Query, State, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::http::request::Parts;
 use axum::response::IntoResponse;
-use axum::routing::{get, post, delete};
+use axum::routing::{get, post, delete, patch};
 use axum::{Json, Router};
 use dashmap::DashMap;
 use serde::Deserialize;
@@ -21,6 +21,26 @@ use crate::config::AppConfig;
 use crate::db::{self, DbPool};
 use crate::error::{AppError, AppResult};
 use crate::models::*;
+use crate::presence::PresenceManager;
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
+
+async fn check_permission(
+    state: &AppState,
+    user_id: Uuid,
+    server_id: Uuid,
+    permission: i64,
+) -> AppResult<()> {
+    // 1. Fetch member permissions
+    let perms = db::members::get_permissions(&state.db, user_id, server_id).await?;
+    
+    // 2. Check if they have the required permission (or Administrator)
+    if !perms.has(permission) {
+        return Err(AppError::Forbidden);
+    }
+
+    Ok(())
+}
 
 // ─── Application State ─────────────────────────────────────────────────────
 
@@ -35,6 +55,7 @@ pub struct AppState {
     pub ws_sessions: Arc<DashMap<Uuid, broadcast::Sender<String>>>,
     /// Channel subscribers: channel_id → set of user_ids
     pub channel_subs: Arc<DashMap<Uuid, Vec<Uuid>>>,
+    pub presence: Arc<PresenceManager>,
 }
 
 impl AppState {
@@ -46,6 +67,7 @@ impl AppState {
             snowflake: Arc::new(SnowflakeGenerator::new(1)),
             ws_sessions: Arc::new(DashMap::new()),
             channel_subs: Arc::new(DashMap::new()),
+            presence: Arc::new(PresenceManager::new()),
         }
     }
 
@@ -108,6 +130,16 @@ pub fn build_router(state: AppState) -> Router {
         // Channels
         .route("/api/servers/:server_id/channels", post(create_channel))
         .route("/api/servers/:server_id/channels", get(list_channels))
+        // Roles
+        .route("/api/servers/:server_id/roles", get(list_roles))
+        .route("/api/servers/:server_id/roles", post(create_role))
+        .route("/api/servers/:server_id/roles", post(create_role))
+        .route("/api/servers/:server_id/roles/:role_id", delete(delete_role).patch(update_role))
+        .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::put(assign_role))
+        .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::delete(remove_role))
+        .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::delete(remove_role))
+        .route("/api/servers/:server_id/members", get(list_members))
+        .route("/api/servers/:server_id/members/:user_id", get(get_member))
         // Messages
         .route("/api/channels/:channel_id/messages", post(send_message))
         .route("/api/channels/:channel_id/messages", get(get_messages))
@@ -216,6 +248,16 @@ async fn create_server(
     let voice_id = Uuid::now_v7();
     db::channels::create(&state.db, voice_id, server_id, "Voice", &ChannelType::Voice, 1, None).await?;
 
+    // Create @everyone role (default permissions: SEND_MESSAGES)
+    db::roles::create(
+        &state.db, 
+        server_id, 
+        "@everyone", 
+        Permissions::SEND_MESSAGES, 
+        0, 
+        0
+    ).await?;
+
     Ok(Json(server))
 }
 
@@ -255,13 +297,135 @@ async fn leave_server(
     Ok(StatusCode::OK)
 }
 
+// ─── Role Handlers ──────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct CreateRoleRequest {
+    name: String,
+    permissions: i64,
+    color: i32,
+    position: i32,
+}
+
+async fn list_roles(
+    State(state): State<AppState>,
+    Path(server_id): Path<Uuid>,
+) -> AppResult<Json<Vec<Role>>> {
+    let roles = db::roles::list_for_server(&state.db, server_id).await?;
+    Ok(Json(roles))
+}
+
+async fn create_role(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(server_id): Path<Uuid>,
+    Json(req): Json<CreateRoleRequest>,
+) -> AppResult<Json<Role>> {
+    check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_SERVER).await?;
+    
+    let role = db::roles::create(
+        &state.db, 
+        server_id, 
+        &req.name, 
+        req.permissions, 
+        req.color, 
+        req.position
+    ).await?;
+    
+    Ok(Json(role))
+}
+
+async fn update_role(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((server_id, role_id)): Path<(Uuid, Uuid)>,
+    Json(req): Json<CreateRoleRequest>,
+) -> AppResult<Json<Role>> {
+    check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_SERVER).await?;
+
+    let role = db::roles::update(
+        &state.db,
+        role_id,
+        server_id,
+        &req.name,
+        req.permissions,
+        req.color,
+        req.position,
+    )
+    .await?
+    .ok_or(AppError::NotFound("Role not found".to_string()))?;
+
+    Ok(Json(role))
+}
+
+async fn delete_role(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((server_id, role_id)): Path<(Uuid, Uuid)>,
+) -> AppResult<StatusCode> {
+    check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_SERVER).await?;
+    // TODO: Prevent deleting @everyone or integration roles
+    db::roles::delete(&state.db, role_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn assign_role(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((server_id, user_id, role_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> AppResult<StatusCode> {
+    check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_SERVER).await?;
+    db::members::add_role(&state.db, user_id, server_id, role_id).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn remove_role(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((server_id, user_id, role_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> AppResult<StatusCode> {
+    check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_SERVER).await?;
+    db::members::remove_role(&state.db, user_id, server_id, role_id).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn get_member(
+    State(state): State<AppState>,
+    Path((server_id, user_id)): Path<(Uuid, Uuid)>,
+) -> AppResult<Json<Member>> {
+    let member = db::members::find(&state.db, user_id, server_id)
+        .await?
+        .ok_or(AppError::NotFound("Member not found".to_string()))?;
+    Ok(Json(member))
+}
+
+async fn list_members(
+    State(state): State<AppState>,
+    Path(server_id): Path<Uuid>,
+) -> AppResult<Json<Vec<Member>>> {
+    let mut members = db::members::list_for_server(&state.db, server_id).await?;
+    
+    // Populate presence status
+    let user_ids: Vec<Uuid> = members.iter().map(|m| m.user_id).collect();
+    let statuses = state.presence.get_bulk_status(&user_ids);
+    
+    for member in &mut members {
+        member.status = Some(statuses.get(&member.user_id).cloned().unwrap_or(PresenceStatus::Offline));
+    }
+    
+    Ok(Json(members))
+}
+
 // ─── Channel Handlers ───────────────────────────────────────────────────────
 
 async fn create_channel(
     State(state): State<AppState>,
+    auth: AuthUser,
     Path(server_id): Path<Uuid>,
     Json(req): Json<CreateChannelRequest>,
 ) -> AppResult<Json<Channel>> {
+    check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_CHANNELS).await?;
+
     let channel_id = Uuid::now_v7();
     let channel = db::channels::create(
         &state.db,
@@ -419,6 +583,20 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
         .send(WsMessage::Text(serde_json::to_string(&ready).unwrap().into()))
         .await;
 
+    // Set online status
+    state.presence.set_status(user_id, PresenceStatus::Online);
+    
+    // Broadcast presence update to all mutual guilds/users (simplified: broadcast to all known channels for now)
+    // In a real app, we'd only send to mutuals. Here, we send to channels the user is in.
+    let presence_update = WsEvent::PresenceUpdate { 
+        user_id, 
+        status: PresenceStatus::Online 
+    };
+    
+    for channel_id in &subscribed_channels {
+        state.broadcast_to_channel(channel_id, &presence_update);
+    }
+
     // Spawn task to forward broadcast messages to WebSocket
     let mut send_socket = socket;
     let forward_handle = tokio::spawn(async move {
@@ -445,6 +623,24 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
     }
 
     tracing::info!("WebSocket disconnected: {}", user_id);
+
+    // Set offline status
+    state.presence.set_offline(&user_id);
+    
+    let presence_update = WsEvent::PresenceUpdate { 
+        user_id, 
+        status: PresenceStatus::Offline 
+    };
+    
+    // We already unsubscribed, but we need to notify others.
+    // The channel_subs map still has other users.
+    // We can iterate over the channels we *were* in.
+    // However, we just cleared local `subscribed_channels` from global map.
+    // But we still have the list in `subscribed_channels` local variable!
+    
+    for channel_id in subscribed_channels {
+        state.broadcast_to_channel(&channel_id, &presence_update);
+    }
 }
 
 // ─── Health Check ───────────────────────────────────────────────────────────

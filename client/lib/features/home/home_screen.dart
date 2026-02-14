@@ -8,6 +8,11 @@ import '../../core/channel_provider.dart';
 import '../../core/settings_provider.dart';
 import 'background_manager.dart';
 import 'rainbow_builder.dart';
+import '../../core/member_provider.dart';
+import '../../core/models/permissions.dart';
+import '../settings/roles_screen.dart';
+import '../../core/models/user.dart';
+import 'member_list.dart';
 
 /// Main app shell — server list (taskbar) + channel list + content area.
 class HomeScreen extends ConsumerStatefulWidget {
@@ -116,19 +121,54 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               //   ),
               // ),
               alignment: Alignment.centerLeft,
-              child: Text(
-                selectedServerId != null
-                    ? (servers.servers
-                            .where((s) => s.id == selectedServerId)
-                            .map((s) => s.name)
-                            .firstOrNull ??
-                        'Server')
-                    : 'Direct Messages',
-                style: Theme.of(context)
-                    .textTheme
-                    .labelLarge
-                    ?.copyWith(fontWeight: FontWeight.w700),
-                overflow: TextOverflow.ellipsis,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      selectedServerId != null
+                          ? (servers.servers
+                                  .where((s) => s.id == selectedServerId)
+                                  .map((s) => s.name)
+                                  .firstOrNull ??
+                              'Server')
+                          : 'Direct Messages',
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelLarge
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (selectedServerId != null)
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final perms =
+                            ref.watch(permissionsProvider(selectedServerId));
+                        if (!perms.has(Permissions.MANAGE_SERVER))
+                          return const SizedBox();
+                        return PopupMenuButton<String>(
+                          icon: const Icon(Icons.expand_more,
+                              color: AntarcticomTheme.textPrimary),
+                          onSelected: (value) {
+                            if (value == 'roles') {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      RolesScreen(serverId: selectedServerId),
+                                ),
+                              );
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'roles',
+                              child: Text('Server Roles'),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                ],
               ),
             ),
             // List
@@ -154,6 +194,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
     }
 
+    // 4. Member List (Right Sidebar)
+    Widget buildMemberList() {
+      if (selectedServerId == null) return const SizedBox();
+
+      // Toggle logic could go here (e.g. only show if button pressed)
+      // For now, always show on desktop if server selected
+      return MemberList(serverId: selectedServerId);
+    }
+
     // ─── Layout Logic ───────────────────────────────────────────────────
 
     Widget layout;
@@ -162,6 +211,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             settings.taskbarPosition == TaskbarPosition.right);
     final sidebar = buildSidebar();
     final content = buildContent();
+    final memberList = buildMemberList();
 
     switch (settings.taskbarPosition) {
       case TaskbarPosition.bottom:
@@ -169,7 +219,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             Expanded(
               child: Row(
-                children: [sidebar, content],
+                children: [sidebar, content, memberList],
               ),
             ),
             taskbar,
@@ -182,7 +232,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             taskbar,
             Expanded(
               child: Row(
-                children: [sidebar, content],
+                children: [sidebar, content, memberList],
               ),
             ),
           ],
@@ -193,6 +243,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           children: [
             sidebar,
             content,
+            memberList,
             taskbar,
           ],
         );
@@ -203,6 +254,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             taskbar,
             sidebar,
             content,
+            memberList,
           ],
         );
         break;
@@ -301,7 +353,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
       children: [
         if (channels.textChannels.isNotEmpty) ...[
-          const _ChannelCategory(name: 'TEXT CHANNELS'),
+          _ChannelCategory(
+            name: 'TEXT CHANNELS',
+            onAdd: () => _showCreateChannelDialog(context, selectedServerId),
+            serverId: selectedServerId,
+          ),
           ...channels.textChannels.map((ch) => _ChannelItem(
                 name: ch.name,
                 icon: Icons.tag,
@@ -311,7 +367,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ],
         if (channels.voiceChannels.isNotEmpty) ...[
           const SizedBox(height: AntarcticomTheme.spacingMd),
-          const _ChannelCategory(name: 'VOICE CHANNELS'),
+          _ChannelCategory(
+            name: 'VOICE CHANNELS',
+            onAdd: () => _showCreateChannelDialog(context, selectedServerId,
+                isVoice: true),
+            serverId: selectedServerId,
+          ),
           ...channels.voiceChannels.map((ch) => _ChannelItem(
                 name: ch.name,
                 icon: Icons.volume_up,
@@ -351,7 +412,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildUserPanel(
-      UserInfo? user, BuildContext context, AppSettings settings) {
+      User? user, BuildContext context, AppSettings settings) {
     return Container(
       height: 52,
       padding:
@@ -464,6 +525,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ref.read(selectedChannelIdProvider.notifier).state = channelId;
     context.go('/channels/$serverId/$channelId');
   }
+
+  void _showCreateChannelDialog(BuildContext context, String serverId,
+      {bool isVoice = false}) {
+    final perms = ref.read(permissionsProvider(serverId));
+    if (!perms.has(Permissions.MANAGE_CHANNELS)) return;
+
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isVoice ? 'Create Voice Channel' : 'Create Text Channel'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(labelText: 'Channel Name'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                await ref.read(channelsProvider.notifier).createChannel(
+                    serverId, controller.text, isVoice ? 'voice' : 'text');
+                if (context.mounted) Navigator.pop(context);
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
@@ -574,11 +670,22 @@ class _ServerIconState extends State<_ServerIcon> {
 }
 
 // (Reused Channel Helpers)
-class _ChannelCategory extends StatelessWidget {
+// (Reused Channel Helpers)
+class _ChannelCategory extends ConsumerWidget {
   final String name;
-  const _ChannelCategory({required this.name});
+  final VoidCallback? onAdd;
+  final String? serverId;
+
+  const _ChannelCategory({required this.name, this.onAdd, this.serverId});
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    bool canAdd = false;
+    if (serverId != null) {
+      final perms = ref.watch(permissionsProvider(serverId!));
+      canAdd = perms.has(Permissions.MANAGE_CHANNELS);
+    }
+
     return Padding(
       padding: const EdgeInsets.only(
         left: AntarcticomTheme.spacingSm,
@@ -590,15 +697,24 @@ class _ChannelCategory extends StatelessWidget {
           const Icon(Icons.expand_more,
               size: 10, color: AntarcticomTheme.textMuted),
           const SizedBox(width: 4),
-          Text(
-            name,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AntarcticomTheme.textMuted,
-              letterSpacing: 0.5,
+          Expanded(
+            child: Text(
+              name,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: AntarcticomTheme.textMuted,
+                letterSpacing: 0.5,
+              ),
             ),
           ),
+          if (canAdd && onAdd != null)
+            InkWell(
+              onTap: onAdd,
+              child: const Icon(Icons.add,
+                  size: 14, color: AntarcticomTheme.textPrimary),
+            ),
+          const SizedBox(width: 8),
         ],
       ),
     );

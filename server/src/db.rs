@@ -332,24 +332,27 @@ pub mod messages {
 
 // ─── Member Queries ─────────────────────────────────────────────────────────
 
+// ─── Member Queries ─────────────────────────────────────────────────────────
+
 pub mod members {
     use sqlx::PgPool;
     use uuid::Uuid;
 
     use crate::error::AppResult;
-    use crate::models::Member;
+    use crate::models::{Member, Permissions};
 
     pub async fn add(
         pool: &PgPool,
         user_id: Uuid,
         server_id: Uuid,
     ) -> AppResult<Member> {
+        // We initialize with empty roles list
         let member = sqlx::query_as::<_, Member>(
             r#"
             INSERT INTO members (user_id, server_id, joined_at)
             VALUES ($1, $2, NOW())
             ON CONFLICT (user_id, server_id) DO UPDATE SET joined_at = members.joined_at
-            RETURNING *
+            RETURNING *, ARRAY[]::uuid[] as roles
             "#,
         )
         .bind(user_id)
@@ -369,13 +372,221 @@ pub mod members {
         Ok(result.rows_affected() > 0)
     }
 
+    pub async fn find(pool: &PgPool, user_id: Uuid, server_id: Uuid) -> AppResult<Option<Member>> {
+        let rows = sqlx::query(
+            r#"
+            SELECT m.*, 
+                   u.username, u.display_name, u.avatar_hash,
+                   COALESCE(array_agg(mr.role_id) FILTER (WHERE mr.role_id IS NOT NULL), '{}') as roles
+            FROM members m
+            JOIN users u ON m.user_id = u.id
+            LEFT JOIN member_roles mr ON m.user_id = mr.user_id AND m.server_id = mr.server_id
+            WHERE m.user_id = $1 AND m.server_id = $2
+            GROUP BY m.user_id, m.server_id, u.id
+            "#,
+        )
+        .bind(user_id)
+        .bind(server_id)
+        .fetch_optional(pool)
+        .await?;
+
+        let member = rows.map(|row| {
+            use sqlx::Row;
+            use crate::models::UserPublic;
+
+            Member {
+                user_id: row.get("user_id"),
+                server_id: row.get("server_id"),
+                nickname: row.get("nickname"),
+                joined_at: row.get("joined_at"),
+                roles: row.get("roles"),
+                user: Some(UserPublic {
+                    id: row.get("user_id"),
+                    username: row.get("username"),
+                    display_name: row.get("display_name"),
+                    avatar_hash: row.get("avatar_hash"),
+                }),
+            }
+        });
+        Ok(member)
+    }
+
     pub async fn list_for_server(pool: &PgPool, server_id: Uuid) -> AppResult<Vec<Member>> {
-        let members = sqlx::query_as::<_, Member>(
-            "SELECT * FROM members WHERE server_id = $1 ORDER BY joined_at",
+        let rows = sqlx::query(
+            r#"
+            SELECT m.*, 
+                   u.username, u.display_name, u.avatar_hash,
+                   COALESCE(array_agg(mr.role_id) FILTER (WHERE mr.role_id IS NOT NULL), '{}') as roles
+            FROM members m
+            JOIN users u ON m.user_id = u.id
+            LEFT JOIN member_roles mr ON m.user_id = mr.user_id AND m.server_id = mr.server_id
+            WHERE m.server_id = $1
+            GROUP BY m.user_id, m.server_id, u.id
+            ORDER BY m.joined_at
+            "#,
         )
         .bind(server_id)
         .fetch_all(pool)
         .await?;
+
+        let members = rows
+            .into_iter()
+            .map(|row| {
+                use sqlx::Row;
+                use crate::models::UserPublic;
+
+                Member {
+                    user_id: row.get("user_id"),
+                    server_id: row.get("server_id"),
+                    nickname: row.get("nickname"),
+                    joined_at: row.get("joined_at"),
+                    roles: row.get("roles"),
+                    user: Some(UserPublic {
+                        id: row.get("user_id"),
+                        username: row.get("username"),
+                        display_name: row.get("display_name"),
+                        avatar_hash: row.get("avatar_hash"),
+                    }),
+                }
+            })
+            .collect();
         Ok(members)
+    }
+
+    pub async fn add_role(pool: &PgPool, user_id: Uuid, server_id: Uuid, role_id: Uuid) -> AppResult<()> {
+        sqlx::query(
+            "INSERT INTO member_roles (user_id, server_id, role_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+        )
+        .bind(user_id)
+        .bind(server_id)
+        .bind(role_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn remove_role(pool: &PgPool, user_id: Uuid, server_id: Uuid, role_id: Uuid) -> AppResult<()> {
+        sqlx::query(
+            "DELETE FROM member_roles WHERE user_id = $1 AND server_id = $2 AND role_id = $3",
+        )
+        .bind(user_id)
+        .bind(server_id)
+        .bind(role_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn get_permissions(pool: &PgPool, user_id: Uuid, server_id: Uuid) -> AppResult<Permissions> {
+        // 1. Check if owner
+        let server_owner = sqlx::query_scalar::<_, Uuid>("SELECT owner_id FROM servers WHERE id = $1")
+            .bind(server_id)
+            .fetch_optional(pool)
+            .await?;
+        
+        if let Some(owner_id) = server_owner {
+            if owner_id == user_id {
+                return Ok(Permissions::new(Permissions::ADMINISTRATOR));
+            }
+        }
+
+        // 2. Aggregate permissions from roles
+        let permissions = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT COALESCE(BIT_OR(r.permissions), 0)
+            FROM member_roles mr
+            JOIN roles r ON mr.role_id = r.id
+            WHERE mr.user_id = $1 AND mr.server_id = $2
+            "#,
+        )
+        .bind(user_id)
+        .bind(server_id)
+        .fetch_one(pool)
+        .await?;
+
+        Ok(Permissions::new(permissions))
+    }
+}
+
+// ─── Role Queries ───────────────────────────────────────────────────────────
+
+pub mod roles {
+    use sqlx::PgPool;
+    use uuid::Uuid;
+
+    use crate::error::AppResult;
+    use crate::models::Role;
+
+    pub async fn create(
+        pool: &PgPool,
+        server_id: Uuid,
+        name: &str,
+        permissions: i64,
+        color: i32,
+        position: i32,
+    ) -> AppResult<Role> {
+        let id = Uuid::now_v7();
+        let role = sqlx::query_as::<_, Role>(
+            r#"
+            INSERT INTO roles (id, server_id, name, permissions, color, position)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *
+            "#,
+        )
+        .bind(id)
+        .bind(server_id)
+        .bind(name)
+        .bind(permissions)
+        .bind(color)
+        .bind(position)
+        .fetch_one(pool)
+        .await?;
+        Ok(role)
+    }
+
+    pub async fn list_for_server(pool: &PgPool, server_id: Uuid) -> AppResult<Vec<Role>> {
+        let roles = sqlx::query_as::<_, Role>(
+            "SELECT * FROM roles WHERE server_id = $1 ORDER BY position DESC",
+        )
+        .bind(server_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(roles)
+    }
+
+    pub async fn delete(pool: &PgPool, id: Uuid) -> AppResult<bool> {
+        let result = sqlx::query("DELETE FROM roles WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn update(
+        pool: &PgPool,
+        role_id: Uuid,
+        server_id: Uuid,
+        name: &str,
+        permissions: i64,
+        color: i32,
+        position: i32,
+    ) -> AppResult<Option<Role>> {
+        let role = sqlx::query_as::<_, Role>(
+            r#"
+            UPDATE roles
+            SET name = $3, permissions = $4, color = $5, position = $6
+            WHERE id = $1 AND server_id = $2
+            RETURNING *
+            "#,
+        )
+        .bind(role_id)
+        .bind(server_id)
+        .bind(name)
+        .bind(permissions)
+        .bind(color)
+        .bind(position)
+        .fetch_optional(pool)
+        .await?;
+        Ok(role)
     }
 }

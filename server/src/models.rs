@@ -130,12 +130,20 @@ pub struct EditMessageRequest {
 
 // ─── Members ────────────────────────────────────────────────────────────────
 
+// ─── Members ────────────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Member {
     pub user_id: Uuid,
     pub server_id: Uuid,
     pub nickname: Option<String>,
     pub joined_at: DateTime<Utc>,
+    #[sqlx(skip)]
+    pub roles: Vec<Uuid>, // Role IDs
+    #[sqlx(skip)]
+    pub user: Option<UserPublic>,
+    #[sqlx(skip)]
+    pub status: Option<PresenceStatus>,
 }
 
 // ─── Roles ──────────────────────────────────────────────────────────────────
@@ -148,6 +156,40 @@ pub struct Role {
     pub permissions: i64,
     pub color: i32,
     pub position: i32,
+}
+
+// ─── Permissions ────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Permissions(i64);
+
+impl Permissions {
+    pub const MANAGE_CHANNELS: i64 = 1 << 0; // 1
+    pub const MANAGE_SERVER:   i64 = 1 << 1; // 2
+    pub const KICK_MEMBERS:    i64 = 1 << 2; // 4
+    pub const BAN_MEMBERS:     i64 = 1 << 3; // 8
+    pub const SEND_MESSAGES:   i64 = 1 << 4; // 16
+    pub const ADMINISTRATOR:   i64 = 1 << 5; // 32
+
+    pub fn new(bits: i64) -> Self {
+        Self(bits)
+    }
+
+    pub fn bits(&self) -> i64 {
+        self.0
+    }
+
+    pub fn has(&self, permission: i64) -> bool {
+        (self.0 & Self::ADMINISTRATOR) != 0 || (self.0 & permission) != 0
+    }
+
+    pub fn add(&mut self, permission: i64) {
+        self.0 |= permission;
+    }
+
+    pub fn remove(&mut self, permission: i64) {
+        self.0 &= !permission;
+    }
 }
 
 // ─── Voice ──────────────────────────────────────────────────────────────────
