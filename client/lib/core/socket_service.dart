@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:web_socket_channel/status.dart' as status;
 
 import 'api_service.dart';
 
@@ -26,12 +25,13 @@ class WsEvent {
 class SocketService {
   final ApiService _api;
   WebSocketChannel? _channel;
+  StreamSubscription? _subscription;
   final _eventController = StreamController<WsEvent>.broadcast();
 
   String? _token;
   Timer? _reconnectTimer;
   int _reconnectAttempts = 0;
-  bool _disposed = false;
+  bool _shouldReconnect = false;
 
   /// Max backoff delay in seconds.
   static const int _maxBackoffSec = 30;
@@ -44,13 +44,16 @@ class SocketService {
 
   /// Connect to the WebSocket gateway.
   void connect(String token) {
-    if (_channel != null || _disposed) return;
+    _shouldReconnect = true;
     _token = token;
+    _reconnectAttempts = 0;
+    // Clean up any existing connection first
+    _cleanup();
     _doConnect();
   }
 
   void _doConnect() {
-    if (_disposed || _token == null) return;
+    if (!_shouldReconnect || _token == null) return;
     if (_channel != null) return;
 
     final wsUrl = _api.wsUrl;
@@ -59,9 +62,20 @@ class SocketService {
     debugPrint('Connecting to WebSocket: $uri');
 
     try {
-      _channel = WebSocketChannel.connect(uri);
+      final channel = WebSocketChannel.connect(uri);
+      _channel = channel;
 
-      _channel!.stream.listen(
+      // Wait for the channel to be ready before sending identify
+      channel.ready.then((_) {
+        if (_channel == channel && _token != null) {
+          _sendIdentify(_token!);
+        }
+      }).catchError((error) {
+        debugPrint('WebSocket ready error: $error');
+        // onDone will fire and trigger reconnect
+      });
+
+      _subscription = channel.stream.listen(
         (message) {
           // Successful data means we're connected – reset backoff
           _reconnectAttempts = 0;
@@ -77,26 +91,44 @@ class SocketService {
         onDone: () {
           debugPrint('WebSocket closed');
           _channel = null;
+          _subscription = null;
           _scheduleReconnect();
         },
         onError: (error) {
           debugPrint('WebSocket error: $error');
           _channel = null;
+          _subscription = null;
           _scheduleReconnect();
         },
       );
-
-      _sendIdentify(_token!);
     } catch (e) {
       debugPrint('WebSocket connection failed: $e');
       _channel = null;
+      _subscription = null;
       _scheduleReconnect();
+    }
+  }
+
+  /// Clean up current channel and subscription without affecting reconnect state.
+  void _cleanup() {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _subscription?.cancel();
+    _subscription = null;
+    if (_channel != null) {
+      try {
+        // Use normalClosure (1000) — v3 rejects 1001 (goingAway)
+        _channel!.sink.close(1000);
+      } catch (_) {
+        // Ignore close errors on already-dead channels
+      }
+      _channel = null;
     }
   }
 
   /// Schedule a reconnect with exponential backoff.
   void _scheduleReconnect() {
-    if (_disposed || _token == null) return;
+    if (!_shouldReconnect || _token == null) return;
     _reconnectTimer?.cancel();
 
     final delaySec = (_reconnectAttempts < 1) ? 1 : (1 << _reconnectAttempts);
@@ -117,21 +149,20 @@ class SocketService {
 
   void send(Map<String, dynamic> payload) {
     if (_channel != null) {
-      final text = jsonEncode(payload);
-      _channel!.sink.add(text);
+      try {
+        final text = jsonEncode(payload);
+        _channel!.sink.add(text);
+      } catch (e) {
+        debugPrint('WS send error: $e');
+      }
     }
   }
 
   void disconnect() {
-    _disposed = true;
-    _reconnectTimer?.cancel();
-    _reconnectTimer = null;
+    _shouldReconnect = false;
     _token = null;
     _reconnectAttempts = 0;
-    if (_channel != null) {
-      _channel!.sink.close(status.goingAway);
-      _channel = null;
-    }
+    _cleanup();
   }
 }
 
