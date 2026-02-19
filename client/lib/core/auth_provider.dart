@@ -54,9 +54,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// Try to restore a saved JWT token on app start.
   Future<void> _tryRestoreSession() async {
+    if (!mounted) return;
     state = state.copyWith(isLoading: true);
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+
       final token = prefs.getString('auth_token');
       final username = prefs.getString('username');
       final displayName = prefs.getString('display_name');
@@ -69,6 +72,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         // Restore community server connections
         _connMgr.setToken(token);
         await _connMgr.restoreHosts();
+        if (!mounted) return;
         _connMgr.connectAll(token);
 
         state = AuthState(
@@ -84,6 +88,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = const AuthState();
       }
     } catch (_) {
+      if (!mounted) return;
       state = const AuthState();
     }
   }
