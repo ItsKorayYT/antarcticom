@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
 import '../../core/models/member.dart';
 import '../../core/member_provider.dart';
+import '../../core/api_service.dart';
 
 class MemberList extends ConsumerWidget {
   final String serverId;
@@ -16,9 +17,6 @@ class MemberList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // We'll need a provider that returns List<Member> for the server
-    // and listens to presence updates.
-    // For now, let's assume membersProvider(serverId) gives us the list
     final membersAsync = ref.watch(serverMembersProvider(serverId));
 
     return Container(
@@ -82,33 +80,242 @@ class MemberList extends ConsumerWidget {
   }
 }
 
-class _MemberItem extends StatelessWidget {
+class _MemberItem extends ConsumerWidget {
   final Member member;
 
   const _MemberItem({required this.member});
 
-  @override
-  Widget build(BuildContext context) {
+  /// Build the full avatar URL from the API base URL, user ID, and hash.
+  String? _buildAvatarUrl(String baseUrl, String? userId, String? avatarHash) {
+    if (userId == null || avatarHash == null) return null;
+    return '$baseUrl/api/avatars/$userId/$avatarHash';
+  }
+
+  /// Status indicator color.
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'online':
+        return Colors.green;
+      case 'idle':
+        return Colors.orange;
+      case 'dnd':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  /// Status display label.
+  String _statusLabel(String status) {
+    switch (status) {
+      case 'online':
+        return 'Online';
+      case 'idle':
+        return 'Idle';
+      case 'dnd':
+        return 'Do Not Disturb';
+      default:
+        return 'Offline';
+    }
+  }
+
+  void _showUserProfile(BuildContext context, String? avatarUrl) {
     final user = member.user;
     final name =
         member.nickname ?? user?.displayName ?? user?.username ?? 'Unknown';
-    final avatarUrl = user?.avatarHash; // TODO: construct full URL
+    final username = user?.username ?? '';
+    final statusColor = _statusColor(member.status);
+    final statusLabel = _statusLabel(member.status);
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    final d = member.joinedAt;
+    final joinedDate = '${months[d.month - 1]} ${d.day}, ${d.year}';
 
-    // Status color
-    Color statusColor = Colors.grey;
-    switch (member.status) {
-      case 'online':
-        statusColor = Colors.green;
-        break;
-      case 'idle':
-        statusColor = Colors.orange;
-        break;
-      case 'dnd':
-        statusColor = Colors.red;
-        break;
-      default:
-        statusColor = Colors.grey;
-    }
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: AntarcticomTheme.bgSecondary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Padding(
+            padding: const EdgeInsets.all(0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Banner area
+                Container(
+                  height: 60,
+                  decoration: const BoxDecoration(
+                    gradient: AntarcticomTheme.accentGradient,
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(AntarcticomTheme.radiusMd),
+                      topRight: Radius.circular(AntarcticomTheme.radiusMd),
+                    ),
+                  ),
+                ),
+
+                // Avatar (overlapping the banner)
+                Transform.translate(
+                  offset: const Offset(0, -36),
+                  child: Stack(
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AntarcticomTheme.bgSecondary,
+                            width: 5,
+                          ),
+                        ),
+                        child: CircleAvatar(
+                          radius: 36,
+                          backgroundColor: AntarcticomTheme.bgTertiary,
+                          backgroundImage: avatarUrl != null
+                              ? NetworkImage(avatarUrl)
+                              : null,
+                          child: avatarUrl == null
+                              ? Text(
+                                  name[0].toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                )
+                              : null,
+                        ),
+                      ),
+                      Positioned(
+                        right: 2,
+                        bottom: 2,
+                        child: Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AntarcticomTheme.bgSecondary,
+                              width: 3,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // User info
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                  child: Transform.translate(
+                    offset: const Offset(0, -20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Display name
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            color: AntarcticomTheme.textPrimary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (username.isNotEmpty)
+                          Text(
+                            '@$username',
+                            style: const TextStyle(
+                              color: AntarcticomTheme.textSecondary,
+                              fontSize: 14,
+                            ),
+                          ),
+
+                        const SizedBox(height: 12),
+                        const Divider(
+                          color: AntarcticomTheme.bgTertiary,
+                          height: 1,
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Status
+                        Row(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: statusColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              statusLabel,
+                              style: const TextStyle(
+                                color: AntarcticomTheme.textPrimary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Member since
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today,
+                              size: 14,
+                              color: AntarcticomTheme.textMuted,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Member since $joinedDate',
+                              style: const TextStyle(
+                                color: AntarcticomTheme.textMuted,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = member.user;
+    final name =
+        member.nickname ?? user?.displayName ?? user?.username ?? 'Unknown';
+    final baseUrl = ref.watch(apiServiceProvider).baseUrl;
+    final avatarUrl = _buildAvatarUrl(baseUrl, user?.id, user?.avatarHash);
+    final statusColor = _statusColor(member.status);
 
     return ListTile(
       leading: Stack(
@@ -145,12 +352,9 @@ class _MemberItem extends StatelessWidget {
               : AntarcticomTheme.textPrimary,
         ),
       ),
-      // subtitle: member.status != 'offline' ? Text(member.status) : null,
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      onTap: () {
-        // TODO: Open user profile
-      },
+      onTap: () => _showUserProfile(context, avatarUrl),
     );
   }
 }

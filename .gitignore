@@ -21,6 +21,9 @@ desktop.ini
 # Certificates (generated)
 certs/
 
+# RSA keys (auto-generated)
+data/keys/
+
 # Database files
 *.db
 *.db-journal

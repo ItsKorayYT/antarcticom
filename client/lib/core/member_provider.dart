@@ -53,12 +53,12 @@ final permissionsProvider =
       // 1. Check if owner
       final server = serversState.servers.firstWhere(
         (s) => s.id == serverId,
-        orElse: () =>
-            ServerInfo(id: '', name: '', ownerId: '', iconHash: null), // dummy
+        orElse: () => const ServerInfo(
+            id: '', name: '', ownerId: '', iconHash: null), // dummy
       );
 
       if (server.id.isNotEmpty && server.ownerId == user?.id) {
-        return const Permissions(Permissions.ADMINISTRATOR);
+        return const Permissions(Permissions.administrator);
       }
 
       // 2. Aggregate role permissions
@@ -131,11 +131,6 @@ class ServerMembersNotifier extends StateNotifier<AsyncValue<List<Member>>> {
       }
     }
     // Also handle MemberJoin/Leave if desired
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }
 

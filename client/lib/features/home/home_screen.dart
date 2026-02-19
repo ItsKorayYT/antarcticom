@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
 import '../../core/server_provider.dart';
+import '../../core/connection_manager.dart';
 import '../../core/channel_provider.dart';
 import '../../core/settings_provider.dart';
 import 'background_manager.dart';
@@ -144,8 +145,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       builder: (context, ref, _) {
                         final perms =
                             ref.watch(permissionsProvider(selectedServerId));
-                        if (!perms.has(Permissions.MANAGE_SERVER))
+                        if (!perms.has(Permissions.manageServer)) {
                           return const SizedBox();
+                        }
                         return PopupMenuButton<String>(
                           icon: const Icon(Icons.expand_more,
                               color: AntarcticomTheme.textPrimary),
@@ -322,14 +324,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return ListView(
       scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
       padding: const EdgeInsets.all(AntarcticomTheme.spacingXs),
-      children: servers.servers.map((server) {
-        return _ServerIcon(
-          label: server.initials,
-          color: Theme.of(context).primaryColor,
-          isSelected: selectedServerId == server.id,
-          onTap: () => _selectServer(server),
-        );
-      }).toList(),
+      children: [
+        ...servers.servers.map((server) {
+          return _ServerIcon(
+            label: server.initials,
+            color: Theme.of(context).primaryColor,
+            isSelected: selectedServerId == server.id,
+            onTap: () => _selectServer(server),
+          );
+        }),
+        // "Add Server" button
+        Padding(
+          padding: EdgeInsets.symmetric(
+            vertical: vertical ? 4 : 0,
+            horizontal: vertical ? 0 : 4,
+          ),
+          child: Tooltip(
+            message: 'Add a community server',
+            child: GestureDetector(
+              onTap: () => _showAddServerDialog(context),
+              child: Container(
+                width: vertical ? 56 : 48,
+                height: vertical ? 56 : 48,
+                decoration: BoxDecoration(
+                  color: AntarcticomTheme.bgTertiary,
+                  borderRadius: BorderRadius.circular(vertical ? 16 : 12),
+                  border: Border.all(
+                    color:
+                        AntarcticomTheme.accentPrimary.withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.add,
+                    color: AntarcticomTheme.accentPrimary,
+                    size: 24,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -529,7 +566,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _showCreateChannelDialog(BuildContext context, String serverId,
       {bool isVoice = false}) {
     final perms = ref.read(permissionsProvider(serverId));
-    if (!perms.has(Permissions.MANAGE_CHANNELS)) return;
+    if (!perms.has(Permissions.manageChannels)) return;
 
     final controller = TextEditingController();
     showDialog(
@@ -557,6 +594,100 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: const Text('Create'),
           ),
         ],
+      ),
+    );
+  }
+
+  // ─── Add Server Dialog ──────────────────────────────────────────────
+
+  void _showAddServerDialog(BuildContext context) {
+    final controller = TextEditingController();
+    String? errorText;
+    bool isLoading = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: AntarcticomTheme.bgSecondary,
+          title: const Text('Add Community Server',
+              style: TextStyle(color: AntarcticomTheme.textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Enter the IP address or domain of a community server.',
+                style: TextStyle(
+                    color: AntarcticomTheme.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                decoration: InputDecoration(
+                  hintText: 'e.g. myserver.com:8443',
+                  hintStyle:
+                      const TextStyle(color: AntarcticomTheme.textSecondary),
+                  errorText: errorText,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  filled: true,
+                  fillColor: AntarcticomTheme.bgPrimary,
+                ),
+                onSubmitted: (_) {},
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel',
+                  style: TextStyle(color: AntarcticomTheme.textSecondary)),
+            ),
+            FilledButton(
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      final url = controller.text.trim();
+                      if (url.isEmpty) {
+                        setDialogState(
+                            () => errorText = 'Please enter a server address');
+                        return;
+                      }
+                      setDialogState(() {
+                        isLoading = true;
+                        errorText = null;
+                      });
+                      try {
+                        final connMgr = ref.read(connectionManagerProvider);
+                        await connMgr.addServer(url);
+                        // Refresh the server list
+                        ref.read(serversProvider.notifier).fetchServers();
+                        if (ctx.mounted) Navigator.of(ctx).pop();
+                      } catch (e) {
+                        setDialogState(() {
+                          isLoading = false;
+                          errorText =
+                              e.toString().replaceAll('Exception: ', '');
+                        });
+                      }
+                    },
+              style: FilledButton.styleFrom(
+                backgroundColor: AntarcticomTheme.accentPrimary,
+              ),
+              child: isLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Connect'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -683,7 +814,7 @@ class _ChannelCategory extends ConsumerWidget {
     bool canAdd = false;
     if (serverId != null) {
       final perms = ref.watch(permissionsProvider(serverId!));
-      canAdd = perms.has(Permissions.MANAGE_CHANNELS);
+      canAdd = perms.has(Permissions.manageChannels);
     }
 
     return Padding(

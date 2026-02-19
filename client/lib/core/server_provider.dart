@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_service.dart';
+import 'connection_manager.dart';
 
 // ─── Server Model ───────────────────────────────────────────────────────
 
@@ -9,19 +11,25 @@ class ServerInfo {
   final String? iconHash;
   final String ownerId;
 
+  /// The base URL of the community host this server lives on.
+  /// `null` means the default auth hub / standalone server.
+  final String? hostUrl;
+
   const ServerInfo({
     required this.id,
     required this.name,
     this.iconHash,
     required this.ownerId,
+    this.hostUrl,
   });
 
-  factory ServerInfo.fromJson(Map<String, dynamic> json) {
+  factory ServerInfo.fromJson(Map<String, dynamic> json, {String? hostUrl}) {
     return ServerInfo(
       id: json['id'] as String,
       name: json['name'] as String,
       iconHash: json['icon_hash'] as String?,
       ownerId: json['owner_id'] as String,
+      hostUrl: hostUrl,
     );
   }
 
@@ -65,26 +73,54 @@ class ServersState {
 
 class ServersNotifier extends StateNotifier<ServersState> {
   final ApiService _api;
+  final ConnectionManager _connMgr;
 
-  ServersNotifier(this._api) : super(const ServersState());
+  ServersNotifier(this._api, this._connMgr) : super(const ServersState());
 
+  /// Fetch servers from the auth hub / standalone AND all community hosts.
   Future<void> fetchServers() async {
     state = const ServersState(isLoading: true);
     try {
-      final data = await _api.listServers();
-      final servers = data
-          .map((e) => ServerInfo.fromJson(e as Map<String, dynamic>))
-          .toList();
-      state = ServersState(servers: servers);
+      final allServers = <ServerInfo>[];
+
+      // 1. Fetch from primary (auth hub / standalone)
+      try {
+        final data = await _api.listServers();
+        allServers.addAll(
+          data.map((e) => ServerInfo.fromJson(e as Map<String, dynamic>)),
+        );
+      } catch (e) {
+        debugPrint('Primary server list failed: $e');
+      }
+
+      // 2. Fetch from each connected community host
+      for (final host in _connMgr.hosts) {
+        final communityApi = _connMgr.getApiForHost(host.url);
+        if (communityApi == null) continue;
+        try {
+          final data = await communityApi.listServers();
+          allServers.addAll(
+            data.map((e) => ServerInfo.fromJson(e as Map<String, dynamic>,
+                hostUrl: host.url)),
+          );
+        } catch (e) {
+          debugPrint('Community host ${host.url} list failed: $e');
+        }
+      }
+
+      state = ServersState(servers: allServers);
     } catch (e) {
       state = const ServersState(error: 'Failed to load servers');
     }
   }
 
-  Future<ServerInfo?> createServer(String name) async {
+  /// Create a server on a specific host (or the primary).
+  Future<ServerInfo?> createServer(String name, {String? hostUrl}) async {
     try {
-      final data = await _api.createServer(name);
-      final server = ServerInfo.fromJson(data);
+      final api =
+          hostUrl != null ? _connMgr.getApiForHost(hostUrl) ?? _api : _api;
+      final data = await api.createServer(name);
+      final server = ServerInfo.fromJson(data, hostUrl: hostUrl);
       state = state.copyWith(servers: [...state.servers, server]);
       return server;
     } catch (_) {
@@ -98,7 +134,8 @@ class ServersNotifier extends StateNotifier<ServersState> {
 final serversProvider =
     StateNotifierProvider<ServersNotifier, ServersState>((ref) {
   final api = ref.watch(apiServiceProvider);
-  return ServersNotifier(api);
+  final connMgr = ref.watch(connectionManagerProvider);
+  return ServersNotifier(api, connMgr);
 });
 
 /// Currently selected server ID.

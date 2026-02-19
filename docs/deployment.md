@@ -58,16 +58,12 @@ docker compose version
 
 ```bash
 # Clone the project (or SCP/upload it)
-git clone https://github.com/your-org/antarcticom.git
+git clone https://github.com/ItsKorayYT/antarcticom.git
 cd antarcticom
-
-# Generate a secure JWT secret
-export JWT_SECRET=$(openssl rand -hex 32)
-echo "JWT_SECRET=$JWT_SECRET" > .env
-
-# Optional: Set a custom domain
-echo "PUBLIC_URL=https://your-domain.com" >> .env
 ```
+
+> [!NOTE]
+> RS256 keys for JWT signing are **auto-generated on first startup**. No manual key or secret generation is needed.
 
 ### 1.4 Deploy with Docker Compose
 
@@ -171,7 +167,7 @@ curl -k https://YOUR_VPS_IP:8443/health
 
 ```powershell
 # Navigate to the client directory
-cd C:\Users\koray\Desktop\Newcord\client
+cd client
 
 # Install dependencies
 flutter pub get
@@ -182,16 +178,8 @@ flutter run -d windows
 
 ### 2.3 Configure Server Connection
 
-The client needs to know where your server is. Create/edit the connection config:
+The client needs to know where your server is. On the login screen, tap the **server icon** to enter your server URL:
 
-**Option A: Environment variable**
-```powershell
-$env:ANTARCTICOM_SERVER_URL = "https://your-domain.com"
-flutter run -d windows
-```
-
-**Option B: In-app settings**
-On the login screen, tap the server icon to enter your server URL manually:
 - `https://your-domain.com` (with nginx + HTTPS)
 - `https://YOUR_VPS_IP:8443` (direct, self-signed cert)
 
@@ -248,18 +236,19 @@ sudo systemctl enable redis-server
 
 ```bash
 # Edit the config
-cp antarcticom.toml /etc/antarcticom/antarcticom.toml
+cp server/antarcticom.toml /etc/antarcticom/antarcticom.toml
 nano /etc/antarcticom/antarcticom.toml
 
 # Update these values:
 # [database]
 # url = "postgres://antarcticom:your_secure_password@localhost:5432/antarcticom"
 # [auth]
-# jwt_secret = "YOUR_GENERATED_SECRET"
+# jwt_private_key_path = "data/keys/auth_private.pem"
+# jwt_public_key_path = "data/keys/auth_public.pem"
 # [server]
 # public_url = "https://your-domain.com"
 
-# Run the server
+# Run the server (keys auto-generate on first startup)
 ANTARCTICOM_CONFIG=/etc/antarcticom/antarcticom.toml ./target/release/antarcticom-server
 ```
 

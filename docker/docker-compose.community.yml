@@ -1,10 +1,11 @@
-# Antarcticom — Docker Compose (Standalone Mode)
+# Antarcticom — Community Server Docker Compose
 #
-# Usage: docker compose -f docker/docker-compose.yml up -d
+# Usage:
+#   AUTH_HUB_URL=https://your-auth-hub.com docker compose -f docker/docker-compose.community.yml up -d
 #
-# This runs in standalone mode (auth + community, all-in-one).
-# RSA keys for JWT signing are auto-generated on first startup
-# and persisted in the ./data/keys volume.
+# This runs Antarcticom in "community" mode: it hosts servers/channels/messages
+# but does NOT handle user registration or login. Tokens are verified using the
+# Auth Hub's RS256 public key, fetched automatically.
 
 services:
   server:
@@ -15,11 +16,14 @@ services:
       - "8443:8443" # API + WebSocket
       - "8444:8444/udp" # Voice (QUIC/UDP)
     environment:
+      - ANTARCTICOM__MODE=community
       - ANTARCTICOM__DATABASE__URL=postgres://antarcticom:antarcticom@postgres:5432/antarcticom
       - ANTARCTICOM__REDIS__URL=redis://redis:6379
+      - ANTARCTICOM__IDENTITY__AUTH_HUB_URL=${AUTH_HUB_URL:?Set AUTH_HUB_URL to your Auth Hub address}
+      - ANTARCTICOM__IDENTITY__FEDERATION_ENABLED=true
       - ANTARCTICOM__LOGGING__LEVEL=info
     volumes:
-      - keydata:/app/data/keys # RSA keys (auto-generated on first run)
+      - keydata:/app/data/keys # Public key cache (fetched from Auth Hub)
     depends_on:
       postgres:
         condition: service_healthy

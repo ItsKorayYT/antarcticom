@@ -1,19 +1,42 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// HTTP API client for the Antarcticom server.
+/// Default auth hub URL — used for login/register when no override is provided.
+const String kDefaultAuthHubUrl = 'http://antarctis.xyz:8443';
+
+/// HTTP API client for an Antarcticom server instance.
+///
+/// Each instance targets a single base URL.  Create one for the auth hub
+/// and one per community server the user has joined.
 class ApiService {
-  static const String _baseUrl = 'http://antarctis.xyz:8443';
+  final String _baseUrl;
 
   final Dio _dio;
 
-  ApiService()
-      : _dio = Dio(BaseOptions(
-          baseUrl: _baseUrl,
+  ApiService({String? baseUrl})
+      : _baseUrl = _stripTrailingSlash(baseUrl ?? kDefaultAuthHubUrl),
+        _dio = Dio(BaseOptions(
+          baseUrl: _stripTrailingSlash(baseUrl ?? kDefaultAuthHubUrl),
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
           headers: {'Content-Type': 'application/json'},
         ));
+
+  static String _stripTrailingSlash(String url) {
+    while (url.endsWith('/')) {
+      url = url.substring(0, url.length - 1);
+    }
+    return url;
+  }
+
+  /// Create an ApiService for a specific community server, copying the auth token.
+  factory ApiService.forServer(String serverUrl, {String? token}) {
+    final api = ApiService(baseUrl: serverUrl);
+    if (token != null) {
+      api.setToken(token);
+    }
+    return api;
+  }
 
   /// Set the auth token for subsequent requests.
   void setToken(String? token) {
@@ -22,6 +45,14 @@ class ApiService {
     } else {
       _dio.options.headers.remove('Authorization');
     }
+  }
+
+  // ─── Instance Discovery ──────────────────────────────────────────────
+
+  /// Fetch instance info from a server. Returns mode, name, version.
+  Future<Map<String, dynamic>> getInstanceInfo() async {
+    final response = await _dio.get('/api/instance/info');
+    return response.data as Map<String, dynamic>;
   }
 
   // ─── Auth ───────────────────────────────────────────────────────────
@@ -165,6 +196,25 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  // ─── Avatars ─────────────────────────────────────────────────────────
+
+  /// Upload an avatar image file. Returns the new avatar hash.
+  Future<String> uploadAvatar(String filePath) async {
+    final formData = FormData.fromMap({
+      'avatar': await MultipartFile.fromFile(filePath),
+    });
+    final response = await _dio.put(
+      '/api/users/@me/avatar',
+      data: formData,
+      options: Options(contentType: 'multipart/form-data'),
+    );
+    return (response.data as Map<String, dynamic>)['avatar_hash'] as String;
+  }
+
+  /// Build the full avatar URL for a user.
+  String avatarUrl(String userId, String hash) =>
+      '$_baseUrl/api/avatars/$userId/$hash';
+
   // ─── Getters ────────────────────────────────────────────────────────
   String get baseUrl => _baseUrl;
   String get wsUrl => _baseUrl.replaceFirst('http', 'ws');
@@ -183,4 +233,5 @@ class ApiService {
 
 // ─── Provider ─────────────────────────────────────────────────────────
 
+/// The primary (auth hub) API service provider.
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());

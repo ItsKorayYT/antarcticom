@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/theme.dart';
 import '../../core/settings_provider.dart';
+import '../../core/auth_provider.dart';
+import '../../core/api_service.dart';
 import '../home/background_manager.dart';
 import '../home/rainbow_builder.dart';
 
@@ -61,6 +64,12 @@ class SettingsScreen extends ConsumerWidget {
                     child: ListView(
                       shrinkWrap: true,
                       children: [
+                        // ─── Profile & Avatar ────────────────────────────
+                        _AvatarSection(ref: ref),
+                        const SizedBox(height: AntarcticomTheme.spacingLg),
+                        const Divider(color: AntarcticomTheme.bgTertiary),
+                        const SizedBox(height: AntarcticomTheme.spacingLg),
+
                         Text(
                           'Visual Customization',
                           style: Theme.of(context)
@@ -379,6 +388,134 @@ class SettingsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+class _AvatarSection extends StatelessWidget {
+  final WidgetRef ref;
+  const _AvatarSection({required this.ref});
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+    final api = ref.read(apiServiceProvider);
+
+    if (user == null) return const SizedBox.shrink();
+
+    final hasAvatar = user.avatarHash != null && user.avatarHash!.isNotEmpty;
+    final initial =
+        user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : '?';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Profile',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: AntarcticomTheme.textPrimary,
+              ),
+        ),
+        const SizedBox(height: AntarcticomTheme.spacingMd),
+        Row(
+          children: [
+            // Avatar
+            GestureDetector(
+              onTap: () => _pickAndUpload(context),
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: AntarcticomTheme.bgTertiary,
+                    backgroundImage: hasAvatar
+                        ? NetworkImage(api.avatarUrl(user.id, user.avatarHash!))
+                        : null,
+                    child: hasAvatar
+                        ? null
+                        : Text(initial,
+                            style: const TextStyle(
+                                fontSize: 28,
+                                color: AntarcticomTheme.textPrimary)),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(
+                        color: AntarcticomTheme.accentPrimary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.camera_alt,
+                          color: Colors.white, size: 16),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AntarcticomTheme.spacingMd),
+            // Name / Username
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user.displayName,
+                    style: const TextStyle(
+                      color: AntarcticomTheme.textPrimary,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '@${user.username}',
+                    style: const TextStyle(
+                      color: AntarcticomTheme.textMuted,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickAndUpload(BuildContext context) async {
+    final api = ref.read(apiServiceProvider);
+    final authNotifier = ref.read(authProvider.notifier);
+    final messenger = ScaffoldMessenger.of(context);
+
+    final picker = ImagePicker();
+    final image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 85,
+    );
+    if (image == null) return;
+
+    try {
+      final hash = await api.uploadAvatar(image.path);
+      authNotifier.updateAvatarHash(hash);
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Avatar updated!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Failed to upload avatar: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 

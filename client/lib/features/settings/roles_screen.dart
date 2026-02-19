@@ -53,7 +53,8 @@ class _RolesScreenState extends ConsumerState<RolesScreen> {
                     final role = rolesState.roles[index];
                     return ListTile(
                       leading: CircleAvatar(
-                        backgroundColor: Color(role.color).withOpacity(1.0),
+                        backgroundColor:
+                            Color(role.color).withValues(alpha: 1.0),
                         radius: 12,
                       ),
                       title: Text(role.name,

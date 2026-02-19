@@ -2,23 +2,32 @@
 
 ## Quick Start
 
-### Option 1: Docker Compose (Recommended)
+### Option 1: Docker Compose — Standalone (Recommended)
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/antarcticom.git
+git clone https://github.com/ItsKorayYT/antarcticom.git
 cd antarcticom
 
-# Set your JWT secret
-export JWT_SECRET=$(openssl rand -hex 32)
-
-# Start everything
+# Start everything (RS256 keys auto-generate on first startup)
 docker compose -f docker/docker-compose.yml up -d
 
 # Your server is now running at https://localhost:8443
 ```
 
-### Option 2: Single Binary (Lite Tier)
+### Option 2: Docker Compose — Community Mode
+
+If you want to run a community server that authenticates against an existing Auth Hub:
+
+```bash
+# Start in community mode, pointing to your Auth Hub
+AUTH_HUB_URL=https://your-auth-hub.com \
+  docker compose -f docker/docker-compose.community.yml up -d
+```
+
+Community servers don't handle login/registration — users authenticate via the Auth Hub and present their JWT to the community server, which verifies it using the Auth Hub's public key.
+
+### Option 3: Single Binary (Lite Tier)
 
 ```bash
 # Download the latest release
@@ -27,6 +36,8 @@ chmod +x antarcticom-server
 
 # Create config (uses SQLite, no Redis needed)
 cat > antarcticom.toml << 'EOF'
+mode = "standalone"
+
 [server]
 host = "0.0.0.0"
 port = 8443
@@ -47,13 +58,15 @@ min_bitrate = 32
 max_bitrate = 128
 
 [auth]
-jwt_secret = "GENERATE_A_RANDOM_SECRET"
+# RS256 keypair — auto-generated on first startup if missing
+jwt_private_key_path = "data/keys/auth_private.pem"
+jwt_public_key_path = "data/keys/auth_public.pem"
 token_expiry = 604800
 allow_local_registration = true
 
 [identity]
 federation_enabled = false
-identity_server_url = ""
+auth_hub_url = ""
 
 [tls]
 cert_path = ""
@@ -66,9 +79,32 @@ level = "info"
 format = "pretty"
 EOF
 
-# Run
+# Run (keys auto-generate at data/keys/)
 ./antarcticom-server
 ```
+
+## Community Mode
+
+To run a **community server** that delegates authentication to an Auth Hub:
+
+```toml
+mode = "community"
+
+[auth]
+# Only the public key path is needed (fetched from Auth Hub automatically)
+jwt_public_key_path = "data/keys/auth_public.pem"
+token_expiry = 604800
+allow_local_registration = false
+
+[identity]
+federation_enabled = true
+auth_hub_url = "https://your-auth-hub.com"
+```
+
+The community server will call `GET /api/auth/public-key` on the Auth Hub to fetch and cache the RS256 public key. No shared secrets are required.
+
+> [!WARNING]
+> Users can only authenticate with community servers linked to the **same Auth Hub** where they registered. Running a separate Auth Hub creates a separate user pool.
 
 ## Deployment Tiers
 
@@ -87,7 +123,8 @@ Environment variables use the prefix `ANTARCTICOM__` with double underscores as 
 ```bash
 ANTARCTICOM__SERVER__PORT=9443
 ANTARCTICOM__DATABASE__URL=postgres://...
-ANTARCTICOM__AUTH__JWT_SECRET=your-secret
+ANTARCTICOM__AUTH__JWT_PRIVATE_KEY_PATH=data/keys/auth_private.pem
+ANTARCTICOM__AUTH__JWT_PUBLIC_KEY_PATH=data/keys/auth_public.pem
 ```
 
 ## Firewall Requirements

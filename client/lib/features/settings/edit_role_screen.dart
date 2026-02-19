@@ -100,51 +100,52 @@ class _EditRoleScreenState extends ConsumerState<EditRoleScreen> {
           CheckboxListTile(
             title: const Text('Administrator'),
             subtitle: const Text('Grants all permissions. Dangerous!'),
-            value: (_permissions & Permissions.ADMINISTRATOR) != 0,
-            onChanged: (v) => _togglePermission(Permissions.ADMINISTRATOR),
+            value: (_permissions & Permissions.administrator) != 0,
+            onChanged: (v) => _togglePermission(Permissions.administrator),
           ),
           CheckboxListTile(
             title: const Text('Manage Server'),
-            value: (_permissions & Permissions.MANAGE_SERVER) != 0,
-            onChanged: (v) => _togglePermission(Permissions.MANAGE_SERVER),
+            value: (_permissions & Permissions.manageServer) != 0,
+            onChanged: (v) => _togglePermission(Permissions.manageServer),
           ),
           CheckboxListTile(
             title: const Text('Manage Channels'),
-            value: (_permissions & Permissions.MANAGE_CHANNELS) != 0,
-            onChanged: (v) => _togglePermission(Permissions.MANAGE_CHANNELS),
+            value: (_permissions & Permissions.manageChannels) != 0,
+            onChanged: (v) => _togglePermission(Permissions.manageChannels),
           ),
           CheckboxListTile(
             title: const Text('Kick Members'),
-            value: (_permissions & Permissions.KICK_MEMBERS) != 0,
-            onChanged: (v) => _togglePermission(Permissions.KICK_MEMBERS),
+            value: (_permissions & Permissions.kickMembers) != 0,
+            onChanged: (v) => _togglePermission(Permissions.kickMembers),
           ),
           CheckboxListTile(
             title: const Text('Ban Members'),
-            value: (_permissions & Permissions.BAN_MEMBERS) != 0,
-            onChanged: (v) => _togglePermission(Permissions.BAN_MEMBERS),
+            value: (_permissions & Permissions.banMembers) != 0,
+            onChanged: (v) => _togglePermission(Permissions.banMembers),
           ),
           CheckboxListTile(
             title: const Text('Send Messages'),
-            value: (_permissions & Permissions.SEND_MESSAGES) != 0,
-            onChanged: (v) => _togglePermission(Permissions.SEND_MESSAGES),
+            value: (_permissions & Permissions.sendMessages) != 0,
+            onChanged: (v) => _togglePermission(Permissions.sendMessages),
           ),
           if (widget.role != null) ...[
             const SizedBox(height: 20),
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
               onPressed: () async {
+                final navigator = Navigator.of(context);
                 final confirm = await showDialog<bool>(
                   context: context,
-                  builder: (context) => AlertDialog(
+                  builder: (ctx) => AlertDialog(
                     title: const Text('Delete Role'),
                     content: const Text(
                         'Are you sure you want to delete this role?'),
                     actions: [
                       TextButton(
-                          onPressed: () => Navigator.pop(context, false),
+                          onPressed: () => Navigator.pop(ctx, false),
                           child: const Text('Cancel')),
                       TextButton(
-                          onPressed: () => Navigator.pop(context, true),
+                          onPressed: () => Navigator.pop(ctx, true),
                           child: const Text('Delete')),
                     ],
                   ),
@@ -153,7 +154,7 @@ class _EditRoleScreenState extends ConsumerState<EditRoleScreen> {
                   await ref
                       .read(rolesProvider(widget.serverId).notifier)
                       .deleteRole(widget.role!.id);
-                  if (mounted) Navigator.of(context).pop();
+                  if (mounted) navigator.pop();
                 }
               },
               child: const Text('Delete Role'),

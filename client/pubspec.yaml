@@ -30,6 +30,7 @@ dependencies:
   flutter_svg: ^2.0.0
   cached_network_image: ^3.3.0
   shimmer: ^3.0.0
+  image_picker: ^1.0.0
 
   # Utilities
   uuid: ^4.3.0

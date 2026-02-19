@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'connection_manager.dart';
 import 'socket_service.dart';
 import 'models/user.dart';
 
@@ -44,8 +45,10 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   final ApiService _api;
   final SocketService _socket;
+  final ConnectionManager _connMgr;
 
-  AuthNotifier(this._api, this._socket) : super(const AuthState()) {
+  AuthNotifier(this._api, this._socket, this._connMgr)
+      : super(const AuthState()) {
     _tryRestoreSession();
   }
 
@@ -62,6 +65,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (token != null && username != null && userId != null) {
         _api.setToken(token);
         _socket.connect(token);
+
+        // Restore community server connections
+        _connMgr.setToken(token);
+        await _connMgr.restoreHosts();
+        _connMgr.connectAll(token);
 
         state = AuthState(
           isAuthenticated: true,
@@ -90,6 +98,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       _api.setToken(token);
       _socket.connect(token);
+
+      // Propagate token to all community connections
+      _connMgr.setToken(token);
+      await _connMgr.restoreHosts();
+      _connMgr.connectAll(token);
+
       await _saveSession(token, user);
 
       state = AuthState(
@@ -123,6 +137,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       _api.setToken(token);
       _socket.connect(token);
+
+      // Propagate token to community connections
+      _connMgr.setToken(token);
+      _connMgr.connectAll(token);
+
       await _saveSession(token, user);
 
       state = AuthState(
@@ -142,9 +161,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     _api.setToken(null);
     _socket.disconnect();
+    _connMgr.disconnectAll();
+    _connMgr.setToken(null);
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear();
     state = const AuthState();
+  }
+
+  /// Update the current user's avatar hash after a successful upload.
+  void updateAvatarHash(String hash) {
+    final user = state.user;
+    if (user != null) {
+      state = state.copyWith(
+        user: User(
+          id: user.id,
+          username: user.username,
+          displayName: user.displayName,
+          avatarHash: hash,
+        ),
+      );
+    }
   }
 
   Future<void> _saveSession(String token, User user) async {
@@ -181,5 +217,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final api = ref.watch(apiServiceProvider);
   final socket = ref.watch(socketServiceProvider);
-  return AuthNotifier(api, socket);
+  final connMgr = ref.watch(connectionManagerProvider);
+  return AuthNotifier(api, socket, connMgr);
 });
