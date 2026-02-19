@@ -10,12 +10,23 @@ This is what most people want — **host your own community server** where your 
 git clone https://github.com/ItsKorayYT/antarcticom.git
 cd antarcticom
 
-# Set AUTH_HUB_URL to the Auth Hub your users are registered on
-AUTH_HUB_URL=https://your-auth-hub.com \
-  docker compose -f docker/docker-compose.community.yml up -d
+# Start a community server (uses the official Auth Hub at antarctis.xyz by default)
+docker compose -f docker/docker-compose.community.yml up -d
 ```
 
-That's it. Your community server is running at `https://localhost:8443`. Users connect with the client, log in via their Auth Hub, and your server verifies their tokens using the Auth Hub's public key — no secrets shared.
+Or even simpler with the included deploy script (Linux):
+
+```bash
+./deploy.sh community
+```
+
+That's it. Your community server is running at `https://localhost:8443`. Users connect with the client, log in via the official Auth Hub, and your server verifies their tokens using the Auth Hub's public key — no secrets shared.
+
+To use a custom Auth Hub instead:
+
+```bash
+AUTH_HUB_URL=https://custom-hub.com docker compose -f docker/docker-compose.community.yml up -d
+```
 
 > [!TIP]
 > Think of it like email: users register on an Auth Hub (like Gmail), then join any community server (like a mailing list). You just host the community — the Auth Hub handles accounts.
@@ -31,6 +42,8 @@ cd antarcticom
 # Start everything (RS256 keys auto-generate on first startup)
 docker compose -f docker/docker-compose.yml up -d
 ```
+
+Or: `./deploy.sh standalone`
 
 > [!WARNING]
 > A standalone server is its own Auth Hub. Users registered here **cannot** authenticate with community servers linked to a different Auth Hub (and vice versa). This is by design — it creates a separate, private user pool.
@@ -74,7 +87,7 @@ allow_local_registration = false
 
 [identity]
 federation_enabled = true
-auth_hub_url = "https://your-auth-hub.com"
+auth_hub_url = "https://antarctis.xyz"
 
 [tls]
 cert_path = ""
@@ -136,7 +149,7 @@ allow_local_registration = false  # Auth Hub handles registration
 
 [identity]
 federation_enabled = true
-auth_hub_url = "https://your-auth-hub.com"  # REQUIRED
+auth_hub_url = "https://antarctis.xyz"  # official hub (default), or your own
 ```
 
 ---

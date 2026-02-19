@@ -63,14 +63,23 @@ Choose **Standalone** for dev or small deploys (single process). For federation,
 
 ### 🏠 Host a Community Server
 
-This is what most people want — host your own server, users log in via an Auth Hub:
+This is what most people want — host your own server, users log in via the official Auth Hub:
 
 ```bash
-AUTH_HUB_URL=https://your-auth-hub.com \
-  docker compose -f docker/docker-compose.community.yml up -d
+docker compose -f docker/docker-compose.community.yml up -d
 ```
 
-Your server verifies tokens using the Auth Hub's public key — no secrets, no user management needed.
+Or use the included deploy script (Linux):
+
+```bash
+./deploy.sh community
+```
+
+Defaults to the official Auth Hub at `antarctis.xyz`. To use a custom Auth Hub:
+
+```bash
+AUTH_HUB_URL=https://custom-hub.com docker compose -f docker/docker-compose.community.yml up -d
+```
 
 ### 🖥 Download the Client
 
@@ -87,6 +96,8 @@ For a fully self-contained instance (dev, small groups, or private deployments):
 ```bash
 docker compose -f docker/docker-compose.yml up -d
 ```
+
+Or: `./deploy.sh standalone`
 
 RSA keys for JWT signing are auto-generated on first startup.
 

@@ -1,7 +1,10 @@
 # Antarcticom — Community Server Docker Compose
 #
 # Usage:
-#   AUTH_HUB_URL=https://your-auth-hub.com docker compose -f docker/docker-compose.community.yml up -d
+#   docker compose -f docker/docker-compose.community.yml up -d
+#   AUTH_HUB_URL=https://custom-hub.com docker compose -f docker/docker-compose.community.yml up -d
+#
+# Defaults to the official Auth Hub (antarctis.xyz) if AUTH_HUB_URL is not set.
 #
 # This runs Antarcticom in "community" mode: it hosts servers/channels/messages
 # but does NOT handle user registration or login. Tokens are verified using the
@@ -19,7 +22,7 @@ services:
       - ANTARCTICOM__MODE=community
       - ANTARCTICOM__DATABASE__URL=postgres://antarcticom:antarcticom@postgres:5432/antarcticom
       - ANTARCTICOM__REDIS__URL=redis://redis:6379
-      - ANTARCTICOM__IDENTITY__AUTH_HUB_URL=${AUTH_HUB_URL:?Set AUTH_HUB_URL to your Auth Hub address}
+      - ANTARCTICOM__IDENTITY__AUTH_HUB_URL=${AUTH_HUB_URL:-https://antarctis.xyz}
       - ANTARCTICOM__IDENTITY__FEDERATION_ENABLED=true
       - ANTARCTICOM__LOGGING__LEVEL=info
     volumes:

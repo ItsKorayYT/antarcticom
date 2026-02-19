@@ -23,8 +23,11 @@ Antarcticom supports three operating modes, configured via [antarcticom.toml](an
 ### Docker — Community Server
 
 ```bash
-# Host a community server (users authenticate via an Auth Hub)
-AUTH_HUB_URL=https://your-auth-hub.com docker compose -f docker/docker-compose.community.yml up -d
+# Uses the official Auth Hub (antarctis.xyz) by default
+docker compose -f docker/docker-compose.community.yml up -d
+
+# Or specify a custom Auth Hub
+AUTH_HUB_URL=https://custom-hub.com docker compose -f docker/docker-compose.community.yml up -d
 ```
 
 ### Docker — Standalone (All-in-One)
