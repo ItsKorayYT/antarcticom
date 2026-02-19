@@ -77,6 +77,45 @@ pub mod users {
             .await?;
         Ok(())
     }
+
+    pub async fn update_avatar_hash(pool: &PgPool, id: Uuid, hash: &str) -> AppResult<()> {
+        sqlx::query("UPDATE users SET avatar_hash = $2 WHERE id = $1")
+            .bind(id)
+            .bind(hash)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Upsert a user from federated auth hub data.
+    /// Used by community servers to create or update local user records
+    /// so that FK constraints (messages, members) work correctly.
+    pub async fn upsert_federated(
+        pool: &PgPool,
+        id: Uuid,
+        username: &str,
+        display_name: &str,
+        avatar_hash: Option<&str>,
+    ) -> AppResult<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO users (id, username, display_name, avatar_hash, password_hash, created_at, last_seen)
+            VALUES ($1, $2, $3, $4, '__federated__', NOW(), NOW())
+            ON CONFLICT (id) DO UPDATE
+              SET username = $2,
+                  display_name = $3,
+                  avatar_hash = COALESCE($4, users.avatar_hash),
+                  last_seen = NOW()
+            "#,
+        )
+        .bind(id)
+        .bind(username)
+        .bind(display_name)
+        .bind(avatar_hash)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
 }
 
 // ─── Server Queries ─────────────────────────────────────────────────────────

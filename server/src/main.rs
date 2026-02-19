@@ -35,7 +35,11 @@ async fn main() -> Result<()> {
         }
     }
 
-    tracing::info!("Starting Antarcticom server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!(
+        "Starting Antarcticom server v{} (mode: {:?})",
+        env!("CARGO_PKG_VERSION"),
+        config.mode
+    );
 
     // Initialize database
     let db_pool = db::init_pool(&config.database).await?;
@@ -45,8 +49,18 @@ async fn main() -> Result<()> {
     db::run_migrations(&db_pool).await?;
     tracing::info!("Migrations complete");
 
-    // Seed default server if none exist
-    seed_default_server(&db_pool).await?;
+    // Seed default server only in standalone mode
+    match config.mode {
+        config::ServerMode::Standalone => {
+            seed_default_server(&db_pool).await?;
+        }
+        config::ServerMode::Community => {
+            tracing::info!("Community mode — skipping default server seed");
+        }
+        config::ServerMode::AuthHub => {
+            tracing::info!("Auth hub mode — no community data to seed");
+        }
+    }
 
     // Initialize Redis (optional)
     let redis_client = if !config.redis.url.is_empty() {
@@ -56,16 +70,26 @@ async fn main() -> Result<()> {
         None
     };
 
+    // Ensure RSA keypair exists (Auth Hub / Standalone only)
+    if config.is_auth_hub() {
+        auth::ensure_keypair(&config.auth)?;
+    }
+
     // Build application state
     let state = api::AppState::new(db_pool, redis_client, config.clone());
 
-    // Start voice server (QUIC) in background
-    let voice_config = config.voice.clone();
-    let voice_handle = tokio::spawn(async move {
-        if let Err(e) = voice::start_voice_server(&voice_config).await {
-            tracing::error!("Voice server error: {}", e);
-        }
-    });
+    // Start voice server (QUIC) in background — only for community / standalone
+    let voice_handle = if config.is_community() {
+        let voice_config = config.voice.clone();
+        Some(tokio::spawn(async move {
+            if let Err(e) = voice::start_voice_server(&voice_config).await {
+                tracing::error!("Voice server error: {}", e);
+            }
+        }))
+    } else {
+        tracing::info!("Auth hub mode — voice server disabled");
+        None
+    };
 
     // Build HTTP + WebSocket router
     let app = api::build_router(state);
@@ -79,7 +103,9 @@ async fn main() -> Result<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
-    voice_handle.abort();
+    if let Some(handle) = voice_handle {
+        handle.abort();
+    }
     tracing::info!("Antarcticom server stopped gracefully");
     Ok(())
 }

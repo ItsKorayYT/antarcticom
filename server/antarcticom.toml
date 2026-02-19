@@ -1,6 +1,12 @@
 # Antarcticom Server Configuration
 # Copy this file and adjust for your deployment.
 
+# Server mode: "standalone" (default), "auth_hub", or "community"
+#   standalone  — all-in-one: auth + community features (dev / small deploys)
+#   auth_hub    — central login/registration server only
+#   community   — self-hosted community (servers/channels/messages); validates tokens against the auth hub
+mode = "standalone"
+
 [server]
 # Bind address for the API + WebSocket server
 host = "0.0.0.0"
@@ -38,8 +44,14 @@ acme_enabled = false
 acme_domain = ""
 
 [auth]
-# JWT secret (generate a strong random string)
-jwt_secret = "CHANGE_ME_IN_PRODUCTION"
+# RSA keypair for JWT signing (RS256)
+# Generate with: openssl genrsa -out data/keys/auth_private.pem 2048
+#                openssl rsa -in data/keys/auth_private.pem -pubout -out data/keys/auth_public.pem
+# Auto-generated on first startup if missing.
+# Private key: only needed on Auth Hub / Standalone (signs tokens)
+jwt_private_key_path = "data/keys/auth_private.pem"
+# Public key: needed on all modes (verifies tokens)
+jwt_public_key_path = "data/keys/auth_public.pem"
 # Token expiry in seconds (default: 7 days)
 token_expiry = 604800
 # Allow local account registration (no official identity server)
@@ -48,7 +60,9 @@ allow_local_registration = true
 [identity]
 # Optional: connect to official Antarcticom identity server for federation
 federation_enabled = false
-identity_server_url = ""
+# URL of the central auth hub (required for community mode)
+# Example: "https://antarctis.xyz:8443"
+auth_hub_url = ""
 
 [logging]
 # Log level: trace, debug, info, warn, error

@@ -2,8 +2,33 @@ use anyhow::Result;
 use serde::Deserialize;
 use std::path::Path;
 
+// ─── Server Mode ────────────────────────────────────────────────────────────
+
+/// Determines which endpoints this server instance exposes.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ServerMode {
+    /// Central auth hub — only registration, login, token validation.
+    AuthHub,
+    /// Self-hosted community — servers, channels, messages, avatars, voice.
+    /// Validates tokens by calling the auth hub.
+    Community,
+    /// Both auth + community in one process (default, current behaviour).
+    Standalone,
+}
+
+impl Default for ServerMode {
+    fn default() -> Self {
+        Self::Standalone
+    }
+}
+
+// ─── Config Structs ─────────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct AppConfig {
+    #[serde(default)]
+    pub mode: ServerMode,
     pub server: ServerConfig,
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
@@ -51,7 +76,10 @@ pub struct TlsConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct AuthConfig {
-    pub jwt_secret: String,
+    /// Path to the RSA private key PEM (required for Auth Hub / Standalone).
+    pub jwt_private_key_path: Option<String>,
+    /// Path to the RSA public key PEM (required for all modes).
+    pub jwt_public_key_path: String,
     pub token_expiry: u64,
     pub allow_local_registration: bool,
 }
@@ -59,7 +87,10 @@ pub struct AuthConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct IdentityConfig {
     pub federation_enabled: bool,
-    pub identity_server_url: String,
+    /// URL of the central auth hub (used in Community mode).
+    /// Example: "https://antarctis.xyz:8443"
+    #[serde(alias = "identity_server_url")]
+    pub auth_hub_url: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -93,5 +124,15 @@ impl AppConfig {
 
         let config: AppConfig = settings.try_deserialize()?;
         Ok(config)
+    }
+
+    /// Whether this instance handles auth (login/register).
+    pub fn is_auth_hub(&self) -> bool {
+        matches!(self.mode, ServerMode::AuthHub | ServerMode::Standalone)
+    }
+
+    /// Whether this instance hosts community features (servers/channels/messages).
+    pub fn is_community(&self) -> bool {
+        matches!(self.mode, ServerMode::Community | ServerMode::Standalone)
     }
 }

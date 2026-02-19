@@ -11,6 +11,7 @@ tokio = { version = "1", features = ["full"] }
 
 # Web framework
 axum = { version = "0.7", features = ["ws"] }
+axum-extra = { version = "0.9", features = ["multipart"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 
@@ -29,6 +30,7 @@ argon2 = "0.5"
 jsonwebtoken = "9"
 ring = "0.17"
 rand = "0.8"
+sha2 = "0.10"
 x25519-dalek = { version = "2", features = ["static_secrets"] }
 ed25519-dalek = { version = "2", features = ["serde"] }
 
@@ -54,7 +56,7 @@ chrono = { version = "0.4", features = ["serde"] }
 dashmap = "5"
 thiserror = "1"
 anyhow = "1"
-dotenvy = "0.15"
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
 [build-dependencies]
 prost-build = "0.12"

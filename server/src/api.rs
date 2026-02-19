@@ -1,23 +1,28 @@
 #[allow(unused_imports)]
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::path::PathBuf;
+use std::time::Instant;
+use tokio::sync::RwLock;
 
 use axum::extract::ws::{Message as WsMessage, WebSocket};
 use axum::extract::{FromRequestParts, Path, Query, State, WebSocketUpgrade};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::http::request::Parts;
 use axum::response::IntoResponse;
-use axum::routing::{get, post, delete};
+use axum::routing::{get, post, put, delete};
 use axum::{Json, Router};
+use axum::body::Body;
+use axum_extra::extract::Multipart;
 use dashmap::DashMap;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
 use crate::auth;
-use crate::config::AppConfig;
+use crate::config::{AppConfig, ServerMode};
 use crate::db::{self, DbPool};
 use crate::error::{AppError, AppResult};
 use crate::models::*;
@@ -56,7 +61,16 @@ pub struct AppState {
     /// Channel subscribers: channel_id → set of user_ids
     pub channel_subs: Arc<DashMap<Uuid, Vec<Uuid>>>,
     pub presence: Arc<PresenceManager>,
+    /// HTTP client for calling the auth hub (community mode).
+    pub http_client: reqwest::Client,
+    /// Cached validated tokens: token → (user_id, username, validated_at)
+    pub token_cache: Arc<DashMap<String, (Uuid, String, Instant)>>,
+    /// Cached public key PEM from the auth hub (Community mode).
+    pub hub_public_key: Arc<RwLock<Option<Vec<u8>>>>,
 }
+
+/// Duration to cache validated tokens (60 seconds).
+const TOKEN_CACHE_TTL_SECS: u64 = 60;
 
 impl AppState {
     pub fn new(db: DbPool, redis: Option<redis::Client>, config: AppConfig) -> Self {
@@ -68,6 +82,12 @@ impl AppState {
             ws_sessions: Arc::new(DashMap::new()),
             channel_subs: Arc::new(DashMap::new()),
             presence: Arc::new(PresenceManager::new()),
+            http_client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(10))
+                .build()
+                .unwrap_or_default(),
+            token_cache: Arc::new(DashMap::new()),
+            hub_public_key: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -82,11 +102,103 @@ impl AppState {
             }
         }
     }
+
+    /// Validate a token, either locally (auth hub / standalone) or via the
+    /// auth hub's public key (community — fetched once and cached).
+    pub async fn validate_token_federated(&self, token: &str) -> AppResult<(Uuid, String)> {
+        // Check cache first
+        if let Some(entry) = self.token_cache.get(token) {
+            let (user_id, username, cached_at) = entry.value().clone();
+            if cached_at.elapsed().as_secs() < TOKEN_CACHE_TTL_SECS {
+                return Ok((user_id, username));
+            } else {
+                drop(entry);
+                self.token_cache.remove(token);
+            }
+        }
+
+        let (user_id, username) = match self.config.mode {
+            ServerMode::Community => {
+                // Fetch the auth hub's public key if we haven't yet
+                let pub_key = {
+                    let cached = self.hub_public_key.read().await;
+                    cached.clone()
+                };
+
+                let pub_key_pem = match pub_key {
+                    Some(key) => key,
+                    None => {
+                        let hub_url = &self.config.identity.auth_hub_url;
+                        if hub_url.is_empty() {
+                            return Err(AppError::Internal(anyhow::anyhow!(
+                                "auth_hub_url not configured for community mode"
+                            )));
+                        }
+
+                        tracing::info!("Fetching auth hub public key from {}", hub_url);
+                        let resp = self
+                            .http_client
+                            .get(format!("{}/api/auth/public-key", hub_url))
+                            .send()
+                            .await
+                            .map_err(|e| {
+                                AppError::Internal(anyhow::anyhow!(
+                                    "Failed to fetch public key from auth hub: {}",
+                                    e
+                                ))
+                            })?;
+
+                        if !resp.status().is_success() {
+                            return Err(AppError::Internal(anyhow::anyhow!(
+                                "Auth hub returned {} for public key request",
+                                resp.status()
+                            )));
+                        }
+
+                        let body: PublicKeyResponse = resp.json().await.map_err(|e| {
+                            AppError::Internal(anyhow::anyhow!(
+                                "Invalid public key response: {}",
+                                e
+                            ))
+                        })?;
+
+                        let key_bytes = body.public_key_pem.into_bytes();
+                        // Cache it
+                        let mut cached = self.hub_public_key.write().await;
+                        *cached = Some(key_bytes.clone());
+                        key_bytes
+                    }
+                };
+
+                // Validate the token locally using the hub's public key
+                let claims =
+                    auth::validate_token_with_public_key(&pub_key_pem, token)?;
+                let uid = auth::user_id_from_claims(&claims)?;
+                let uname = claims.username;
+
+                (uid, uname)
+            }
+            _ => {
+                // Local validation (auth hub or standalone)
+                let claims = auth::validate_token(&self.config.auth, token)?;
+                let uid = auth::user_id_from_claims(&claims)?;
+                (uid, claims.username)
+            }
+        };
+
+        // Cache the result
+        self.token_cache
+            .insert(token.to_string(), (user_id, username.clone(), Instant::now()));
+
+        Ok((user_id, username))
+    }
 }
 
 // ─── JWT Auth Extractor ─────────────────────────────────────────────────────
 
 /// Authenticated user extracted from the `Authorization: Bearer <token>` header.
+/// Supports both local validation (auth hub / standalone) and federated
+/// validation (community mode → calls auth hub with caching).
 pub struct AuthUser {
     pub user_id: Uuid,
 }
@@ -106,49 +218,208 @@ impl FromRequestParts<AppState> for AuthUser {
             .strip_prefix("Bearer ")
             .ok_or(AppError::Unauthorized)?;
 
-        let claims = auth::validate_token(&state.config.auth, token)?;
-        let user_id = auth::user_id_from_claims(&claims)?;
+        let (user_id, _username) = state.validate_token_federated(token).await?;
 
         Ok(AuthUser { user_id })
     }
 }
 
+// ─── Auth Hub Validation Types ──────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct ValidateTokenRequest {
+    token: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ValidateTokenResponse {
+    valid: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    avatar_hash: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PublicKeyResponse {
+    public_key_pem: String,
+    algorithm: String,
+}
+
 // ─── Router ─────────────────────────────────────────────────────────────────
 
-/// Build the main application router.
+/// Build the main application router, gated by server mode.
 pub fn build_router(state: AppState) -> Router {
-    Router::new()
-        // Auth
-        .route("/api/auth/register", post(register))
-        .route("/api/auth/login", post(login))
-        // Servers
-        .route("/api/servers", post(create_server))
-        .route("/api/servers", get(list_servers))
-        .route("/api/servers/:server_id", get(get_server))
-        .route("/api/servers/:server_id/join", post(join_server))
-        .route("/api/servers/:server_id/leave", post(leave_server))
-        // Channels
-        .route("/api/servers/:server_id/channels", post(create_channel))
-        .route("/api/servers/:server_id/channels", get(list_channels))
-        // Roles
-        .route("/api/servers/:server_id/roles", get(list_roles))
-        .route("/api/servers/:server_id/roles", post(create_role))
-        .route("/api/servers/:server_id/roles/:role_id", delete(delete_role).patch(update_role))
-        .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::put(assign_role))
-        .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::delete(remove_role))
-        .route("/api/servers/:server_id/members", get(list_members))
-        .route("/api/servers/:server_id/members/:user_id", get(get_member))
-        // Messages
-        .route("/api/channels/:channel_id/messages", post(send_message))
-        .route("/api/channels/:channel_id/messages", get(get_messages))
-        .route("/api/channels/:channel_id/messages/:message_id", delete(delete_message))
-        // WebSocket gateway
-        .route("/ws", get(ws_upgrade))
-        // Health check
+    let mut router = Router::new();
+
+    // Always available
+    router = router
         .route("/health", get(health_check))
+        .route("/api/instance/info", get(instance_info));
+
+    // Auth endpoints (auth hub + standalone)
+    if state.config.is_auth_hub() {
+        router = router
+            .route("/api/auth/register", post(register))
+            .route("/api/auth/login", post(login))
+            .route("/api/auth/validate", post(validate_token_endpoint))
+            .route("/api/auth/public-key", get(public_key_endpoint));
+    }
+
+    // Community endpoints (community + standalone)
+    if state.config.is_community() {
+        router = router
+            // Servers
+            .route("/api/servers", post(create_server))
+            .route("/api/servers", get(list_servers))
+            .route("/api/servers/:server_id", get(get_server))
+            .route("/api/servers/:server_id/join", post(join_server))
+            .route("/api/servers/:server_id/leave", post(leave_server))
+            // Channels
+            .route("/api/servers/:server_id/channels", post(create_channel))
+            .route("/api/servers/:server_id/channels", get(list_channels))
+            // Roles
+            .route("/api/servers/:server_id/roles", get(list_roles))
+            .route("/api/servers/:server_id/roles", post(create_role))
+            .route("/api/servers/:server_id/roles/:role_id", delete(delete_role).patch(update_role))
+            .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::put(assign_role))
+            .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::delete(remove_role))
+            .route("/api/servers/:server_id/members", get(list_members))
+            .route("/api/servers/:server_id/members/:user_id", get(get_member))
+            // Messages
+            .route("/api/channels/:channel_id/messages", post(send_message))
+            .route("/api/channels/:channel_id/messages", get(get_messages))
+            .route("/api/channels/:channel_id/messages/:message_id", delete(delete_message))
+            // WebSocket gateway
+            .route("/ws", get(ws_upgrade))
+            // Avatars
+            .route("/api/users/@me/avatar", put(upload_avatar))
+            .route("/api/avatars/:user_id/:hash", get(get_avatar));
+    }
+
+    router
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+// ─── Avatar Handlers ────────────────────────────────────────────────────────
+
+const MAX_AVATAR_SIZE: usize = 2 * 1024 * 1024; // 2 MB
+const ALLOWED_CONTENT_TYPES: &[&str] = &["image/png", "image/jpeg", "image/gif", "image/webp"];
+
+async fn upload_avatar(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    mut multipart: Multipart,
+) -> AppResult<Json<serde_json::Value>> {
+    while let Some(field) = multipart.next_field().await.map_err(|e| {
+        AppError::BadRequest(format!("Invalid multipart data: {}", e))
+    })? {
+        let content_type = field.content_type().unwrap_or("application/octet-stream").to_string();
+
+        if !ALLOWED_CONTENT_TYPES.contains(&content_type.as_str()) {
+            return Err(AppError::BadRequest(format!(
+                "Invalid file type: {}. Allowed: PNG, JPEG, GIF, WebP",
+                content_type
+            )));
+        }
+
+        let ext = match content_type.as_str() {
+            "image/png" => "png",
+            "image/jpeg" => "jpg",
+            "image/gif" => "gif",
+            "image/webp" => "webp",
+            _ => "bin",
+        };
+
+        let data = field.bytes().await.map_err(|e| {
+            AppError::BadRequest(format!("Failed to read file: {}", e))
+        })?;
+
+        if data.len() > MAX_AVATAR_SIZE {
+            return Err(AppError::BadRequest(format!(
+                "File too large ({} bytes). Maximum is {} bytes",
+                data.len(),
+                MAX_AVATAR_SIZE
+            )));
+        }
+
+        // Compute SHA-256 hash
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(&data);
+        let hash = format!("{:x}", hasher.finalize());
+
+        // Save to disk: ./data/avatars/{user_id}/{hash}.{ext}
+        let dir = PathBuf::from("./data/avatars").join(auth.user_id.to_string());
+        tokio::fs::create_dir_all(&dir).await.map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to create avatar directory: {}", e))
+        })?;
+
+        // Remove old avatars for this user
+        if let Ok(mut entries) = tokio::fs::read_dir(&dir).await {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                let _ = tokio::fs::remove_file(entry.path()).await;
+            }
+        }
+
+        let file_path = dir.join(format!("{}.{}", hash, ext));
+        tokio::fs::write(&file_path, &data).await.map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to write avatar file: {}", e))
+        })?;
+
+        // Update DB
+        db::users::update_avatar_hash(&state.db, auth.user_id, &hash).await?;
+
+        return Ok(Json(serde_json::json!({ "avatar_hash": hash })));
+    }
+
+    Err(AppError::BadRequest("No file provided".to_string()))
+}
+
+async fn get_avatar(
+    Path((user_id, hash)): Path<(Uuid, String)>,
+) -> Result<impl IntoResponse, AppError> {
+    let dir = PathBuf::from("./data/avatars").join(user_id.to_string());
+
+    // Look for file matching the hash with any extension
+    let mut found: Option<(PathBuf, String)> = None;
+    if let Ok(mut entries) = tokio::fs::read_dir(&dir).await {
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with(&hash) {
+                let ext = name.rsplit('.').next().unwrap_or("bin").to_string();
+                let content_type = match ext.as_str() {
+                    "png" => "image/png",
+                    "jpg" | "jpeg" => "image/jpeg",
+                    "gif" => "image/gif",
+                    "webp" => "image/webp",
+                    _ => "application/octet-stream",
+                };
+                found = Some((entry.path(), content_type.to_string()));
+                break;
+            }
+        }
+    }
+
+    let (path, content_type) = found.ok_or_else(|| AppError::NotFound("Avatar not found".to_string()))?;
+
+    let data = tokio::fs::read(&path).await.map_err(|e| {
+        AppError::Internal(anyhow::anyhow!("Failed to read avatar: {}", e))
+    })?;
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CACHE_CONTROL, "public, max-age=31536000, immutable".to_string()),
+        ],
+        Body::from(data),
+    ))
 }
 
 // ─── Auth Handlers ──────────────────────────────────────────────────────────
@@ -215,6 +486,82 @@ async fn login(
     Ok(Json(AuthResponse {
         token,
         user: user.into(),
+    }))
+}
+
+// ─── Auth Validation & Instance Info ────────────────────────────────────────
+
+/// POST /api/auth/validate — auth hub only.
+/// Validates a JWT and returns user info. Used by community servers.
+async fn validate_token_endpoint(
+    State(state): State<AppState>,
+    Json(req): Json<ValidateTokenRequest>,
+) -> Json<ValidateTokenResponse> {
+    match auth::validate_token(&state.config.auth, &req.token) {
+        Ok(claims) => {
+            match auth::user_id_from_claims(&claims) {
+                Ok(uid) => {
+                    // Look up full user data for display_name and avatar
+                    let (display_name, avatar_hash) =
+                        if let Ok(Some(user)) = db::users::find_by_id(&state.db, uid).await {
+                            (Some(user.display_name), user.avatar_hash)
+                        } else {
+                            (Some(claims.username.clone()), None)
+                        };
+
+                    Json(ValidateTokenResponse {
+                        valid: true,
+                        user_id: Some(uid.to_string()),
+                        username: Some(claims.username),
+                        display_name,
+                        avatar_hash,
+                    })
+                }
+                Err(_) => Json(ValidateTokenResponse {
+                    valid: false,
+                    user_id: None,
+                    username: None,
+                    display_name: None,
+                    avatar_hash: None,
+                }),
+            }
+        }
+        Err(_) => Json(ValidateTokenResponse {
+            valid: false,
+            user_id: None,
+            username: None,
+            display_name: None,
+            avatar_hash: None,
+        }),
+    }
+}
+
+/// GET /api/auth/public-key — auth hub only.
+/// Returns the RSA public key PEM so community servers can verify tokens locally.
+async fn public_key_endpoint(
+    State(state): State<AppState>,
+) -> AppResult<Json<PublicKeyResponse>> {
+    let pem = auth::read_public_key_pem(&state.config.auth)?;
+    Ok(Json(PublicKeyResponse {
+        public_key_pem: pem,
+        algorithm: "RS256".to_string(),
+    }))
+}
+
+/// GET /api/instance/info — always available.
+/// Returns server mode and metadata for client discovery.
+async fn instance_info(
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let mode_str = match state.config.mode {
+        ServerMode::AuthHub => "auth_hub",
+        ServerMode::Community => "community",
+        ServerMode::Standalone => "standalone",
+    };
+    Json(serde_json::json!({
+        "mode": mode_str,
+        "name": state.config.server.public_url,
+        "version": env!("CARGO_PKG_VERSION"),
     }))
 }
 
@@ -521,13 +868,8 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
         Some(Ok(WsMessage::Text(text))) => {
             match serde_json::from_str::<WsEvent>(&text) {
                 Ok(WsEvent::Identify { token }) => {
-                    match auth::validate_token(&state.config.auth, &token) {
-                        Ok(claims) => {
-                            match auth::user_id_from_claims(&claims) {
-                                Ok(id) => id,
-                                Err(_) => return,
-                            }
-                        }
+                    match state.validate_token_federated(&token).await {
+                        Ok((id, _username)) => id,
                         Err(_) => return,
                     }
                 }
