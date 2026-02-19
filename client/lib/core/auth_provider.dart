@@ -222,6 +222,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final api = ref.watch(apiServiceProvider);
   final socket = ref.watch(socketServiceProvider);
-  final connMgr = ref.watch(connectionManagerProvider);
+  // Use ref.read — NOT ref.watch — to avoid an infinite rebuild loop.
+  // restoreHosts() calls notifyListeners(), which would trigger a
+  // watch → rebuild → _tryRestoreSession() → restoreHosts() cycle.
+  final connMgr = ref.read(connectionManagerProvider);
   return AuthNotifier(api, socket, connMgr);
 });
