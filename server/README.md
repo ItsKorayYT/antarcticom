@@ -20,14 +20,18 @@ Antarcticom supports three operating modes, configured via [antarcticom.toml](an
 
 ## Quick Start
 
-### Docker (Recommended)
+### Docker — Community Server
 
 ```bash
-# Standalone (all-in-one)
-docker compose -f docker/docker-compose.yml up -d
-
-# Community server (connects to an Auth Hub)
+# Host a community server (users authenticate via an Auth Hub)
 AUTH_HUB_URL=https://your-auth-hub.com docker compose -f docker/docker-compose.community.yml up -d
+```
+
+### Docker — Standalone (All-in-One)
+
+```bash
+# Self-contained: auth + community in one process
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 ### Manual (Rust Toolchain)

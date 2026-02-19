@@ -2,41 +2,51 @@
 
 ## Quick Start
 
-### Option 1: Docker Compose — Standalone (Recommended)
+### Option 1: Community Server (Most Common)
+
+This is what most people want — **host your own community server** where your friends can join. Users log in via an Auth Hub (like the official one), and your server verifies their identity automatically.
 
 ```bash
-# Clone the repository
+git clone https://github.com/ItsKorayYT/antarcticom.git
+cd antarcticom
+
+# Set AUTH_HUB_URL to the Auth Hub your users are registered on
+AUTH_HUB_URL=https://your-auth-hub.com \
+  docker compose -f docker/docker-compose.community.yml up -d
+```
+
+That's it. Your community server is running at `https://localhost:8443`. Users connect with the client, log in via their Auth Hub, and your server verifies their tokens using the Auth Hub's public key — no secrets shared.
+
+> [!TIP]
+> Think of it like email: users register on an Auth Hub (like Gmail), then join any community server (like a mailing list). You just host the community — the Auth Hub handles accounts.
+
+### Option 2: Standalone Server (All-in-One)
+
+If you want a fully self-contained instance that handles **both** auth and community features (good for dev, small friend groups, or private/corporate use):
+
+```bash
 git clone https://github.com/ItsKorayYT/antarcticom.git
 cd antarcticom
 
 # Start everything (RS256 keys auto-generate on first startup)
 docker compose -f docker/docker-compose.yml up -d
-
-# Your server is now running at https://localhost:8443
 ```
 
-### Option 2: Docker Compose — Community Mode
+> [!WARNING]
+> A standalone server is its own Auth Hub. Users registered here **cannot** authenticate with community servers linked to a different Auth Hub (and vice versa). This is by design — it creates a separate, private user pool.
 
-If you want to run a community server that authenticates against an existing Auth Hub:
+### Option 3: Single Binary (No Docker)
 
-```bash
-# Start in community mode, pointing to your Auth Hub
-AUTH_HUB_URL=https://your-auth-hub.com \
-  docker compose -f docker/docker-compose.community.yml up -d
-```
-
-Community servers don't handle login/registration — users authenticate via the Auth Hub and present their JWT to the community server, which verifies it using the Auth Hub's public key.
-
-### Option 3: Single Binary (Lite Tier)
+If you prefer to run the Rust binary directly, you'll need PostgreSQL and Redis installed on the host.
 
 ```bash
-# Download the latest release
-curl -L https://releases.antarcticom.io/latest/antarcticom-server -o antarcticom-server
+# Download from GitHub Releases
+curl -L https://github.com/ItsKorayYT/antarcticom/releases/latest/download/antarcticom-server -o antarcticom-server
 chmod +x antarcticom-server
 
-# Create config (uses SQLite, no Redis needed)
+# Create config
 cat > antarcticom.toml << 'EOF'
-mode = "standalone"
+mode = "community"  # or "standalone" for all-in-one
 
 [server]
 host = "0.0.0.0"
@@ -44,29 +54,27 @@ port = 8443
 public_url = "https://your-domain.com"
 
 [database]
-url = "sqlite://antarcticom.db"
-max_connections = 5
+url = "postgres://antarcticom:your_password@localhost:5432/antarcticom"
+max_connections = 20
 
 [redis]
-url = ""
+url = "redis://localhost:6379"
 
 [voice]
 host = "0.0.0.0"
 port = 8444
-max_sessions = 50
+max_sessions = 500
 min_bitrate = 32
 max_bitrate = 128
 
 [auth]
-# RS256 keypair — auto-generated on first startup if missing
-jwt_private_key_path = "data/keys/auth_private.pem"
 jwt_public_key_path = "data/keys/auth_public.pem"
 token_expiry = 604800
-allow_local_registration = true
+allow_local_registration = false
 
 [identity]
-federation_enabled = false
-auth_hub_url = ""
+federation_enabled = true
+auth_hub_url = "https://your-auth-hub.com"
 
 [tls]
 cert_path = ""
@@ -79,40 +87,80 @@ level = "info"
 format = "pretty"
 EOF
 
-# Run (keys auto-generate at data/keys/)
+# Run (public key is fetched from the Auth Hub automatically)
 ./antarcticom-server
 ```
 
-## Community Mode
+> [!NOTE]
+> For standalone mode, also set `jwt_private_key_path`, `allow_local_registration = true`, and `federation_enabled = false`. Keys auto-generate on first startup.
 
-To run a **community server** that delegates authentication to an Auth Hub:
+---
+
+## Community Mode — How It Works
+
+Community mode is the primary way to self-host Antarcticom:
+
+```
+1. User opens the client and logs in via the Auth Hub
+2. Auth Hub verifies their password and returns a signed JWT (RS256)
+3. User connects to YOUR community server with that JWT
+4. Your server fetches the Auth Hub's public key (once, then caches it)
+5. Your server verifies the JWT signature locally — no secrets needed
+6. User is in! They can browse servers, chat, and join voice
+```
+
+### What you need
+
+| Requirement | Details |
+|-------------|---------|
+| Docker + Docker Compose | For the easiest setup |
+| A VPS or home server | 1+ vCPU, 512 MB+ RAM |
+| An Auth Hub URL | Where your users have accounts |
+| (Optional) A domain name | For HTTPS via nginx + Let's Encrypt |
+
+### What you DON'T need
+
+- ❌ No RSA private key — only the Auth Hub has that
+- ❌ No shared secrets — the public key is fetched automatically
+- ❌ No user database management — the Auth Hub handles accounts
+
+### Config reference (community mode)
 
 ```toml
 mode = "community"
 
 [auth]
-# Only the public key path is needed (fetched from Auth Hub automatically)
-jwt_public_key_path = "data/keys/auth_public.pem"
+jwt_public_key_path = "data/keys/auth_public.pem"  # auto-fetched from Auth Hub
 token_expiry = 604800
-allow_local_registration = false
+allow_local_registration = false  # Auth Hub handles registration
 
 [identity]
 federation_enabled = true
-auth_hub_url = "https://your-auth-hub.com"
+auth_hub_url = "https://your-auth-hub.com"  # REQUIRED
 ```
 
-The community server will call `GET /api/auth/public-key` on the Auth Hub to fetch and cache the RS256 public key. No shared secrets are required.
+---
 
-> [!WARNING]
-> Users can only authenticate with community servers linked to the **same Auth Hub** where they registered. Running a separate Auth Hub creates a separate user pool.
+## Requirements
 
-## Deployment Tiers
+The server currently requires **PostgreSQL** and **Redis**.
 
-| Tier | Users | Requirements | Database |
-|------|-------|-------------|----------|
-| **Lite** | <50 | 1 CPU, 512 MB RAM | SQLite |
-| **Standard** | <5,000 | 2 CPU, 2 GB RAM | PostgreSQL + Redis |
-| **Scale** | 5,000+ | Kubernetes cluster | PostgreSQL + Redis + ScyllaDB |
+| Component | Required | Purpose |
+|-----------|----------|---------|
+| PostgreSQL | ✅ | Users, servers, channels, messages |
+| Redis | ✅ | Caching, pub/sub, presence |
+| SQLite | 📋 Planned | Lightweight alternative for small deploys |
+| ScyllaDB | 📋 Planned | Horizontal scaling for large deployments |
+
+### Hardware
+
+| Users | CPU | RAM | Disk |
+|-------|-----|-----|------|
+| < 50 | 1 vCPU | 512 MB | 10 GB SSD |
+| < 5,000 | 2+ vCPU | 2 GB | 20 GB SSD |
+| 5,000+ | 4+ vCPU | 4 GB+ | 50 GB+ SSD |
+
+---
 
 ## Configuration Reference
 
@@ -123,8 +171,8 @@ Environment variables use the prefix `ANTARCTICOM__` with double underscores as 
 ```bash
 ANTARCTICOM__SERVER__PORT=9443
 ANTARCTICOM__DATABASE__URL=postgres://...
-ANTARCTICOM__AUTH__JWT_PRIVATE_KEY_PATH=data/keys/auth_private.pem
 ANTARCTICOM__AUTH__JWT_PUBLIC_KEY_PATH=data/keys/auth_public.pem
+ANTARCTICOM__IDENTITY__AUTH_HUB_URL=https://your-auth-hub.com
 ```
 
 ## Firewall Requirements
@@ -171,19 +219,10 @@ server {
 
 ## Backup & Restore
 
-### PostgreSQL
-
 ```bash
 # Backup
 docker exec antarcticom-postgres pg_dump -U antarcticom antarcticom > backup.sql
 
 # Restore
 docker exec -i antarcticom-postgres psql -U antarcticom antarcticom < backup.sql
-```
-
-### SQLite (Lite Tier)
-
-```bash
-# Just copy the database file
-cp antarcticom.db antarcticom.db.backup
 ```

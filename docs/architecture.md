@@ -1,6 +1,6 @@
 # Antarcticom Architecture
 
-See the full architecture design document in the project planning artifacts.
+Overview of the Antarcticom server internals, module structure, and federated authentication model.
 
 ## Quick Reference
 
@@ -30,39 +30,81 @@ server/src/
 └── crypto.rs     → AES-256-GCM, Ed25519, X25519, HKDF
 ```
 
+### System Architecture
+
+```mermaid
+graph TB
+    subgraph Clients["🖥️ Clients"]
+        Win["Windows App"]
+        And["Android App"]
+        Web["Web App"]
+    end
+
+    subgraph Server["⚙️ Antarcticom Server"]
+        API["REST API\n(Axum · :8443)"]
+        WS["WebSocket Gateway\n(real-time events)"]
+        Voice["Voice SFU\n(Quinn/QUIC · :8444/UDP)"]
+        Auth["Auth Module\n(RS256 JWT · Argon2id)"]
+        Chat["Chat Engine\n(validation · mentions)"]
+        Presence["Presence\n(online · typing)"]
+    end
+
+    subgraph Data["💾 Data Layer"]
+        PG[("PostgreSQL\nusers · servers\nchannels · messages")]
+        RD[("Redis\ncache · pub/sub\npresence")]
+    end
+
+    Win & And & Web -- "HTTPS + WS" --> API
+    Win & And & Web -- "QUIC/UDP" --> Voice
+    API --> Auth & Chat & Presence
+    WS --> Chat & Presence
+    Auth & Chat --> PG
+    Presence --> RD
+```
+
 ### Server Modes & Federated Authentication
 
 Antarcticom supports three operating modes to enable federation:
 
+```mermaid
+sequenceDiagram
+    participant C as 🖥️ Client
+    participant AH as 🔐 Auth Hub
+    participant CS as 🌐 Community Server
+
+    Note over AH: Holds RSA private key
+    Note over CS: Holds only the public key
+
+    C->>AH: POST /api/auth/login (email + password)
+    AH->>AH: Verify credentials (Argon2id)
+    AH->>AH: Sign JWT with RSA private key (RS256)
+    AH-->>C: 200 OK { token: "eyJ..." }
+
+    Note over CS: On startup or cache miss
+    CS->>AH: GET /api/auth/public-key
+    AH-->>CS: RSA public key (PEM)
+    CS->>CS: Cache public key
+
+    C->>CS: GET /api/servers (Authorization: Bearer eyJ...)
+    CS->>CS: Verify JWT signature with cached public key
+    CS-->>C: 200 OK [ servers... ]
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     Auth Hub                                │
-│  • Holds RSA private key                                    │
-│  • Signs RS256 JWTs on login/register                       │
-│  • Exposes GET /api/auth/public-key                         │
-│  • Manages the user account database                        │
-└────────────────────────┬────────────────────────────────────┘
-                         │  Public key (RS256)
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Community Server                           │
-│  • Fetches & caches the Auth Hub's public key               │
-│  • Verifies JWT signatures locally — no shared secrets      │
-│  • Hosts servers, channels, messages, roles                 │
-│  • Can be self-hosted by anyone                             │
-└─────────────────────────────────────────────────────────────┘
-```
 
-**Standalone** mode combines both roles into a single process.
+**Standalone** mode combines both Auth Hub and Community into a single process.
 
-**Key security property:** Community servers never see the private key. Authentication is verified purely via RS256 public-key cryptography, meaning there are no shared secrets between the Auth Hub and Community servers.
+**Key security property:** Community servers never see the private key. Authentication is verified purely via RS256 public-key cryptography — **no shared secrets** between the Auth Hub and Community servers.
 
-### Voice Flow
+### Voice Pipeline
 
-```
-Mic → Noise Suppression → Opus Encode → AES-256-GCM Encrypt
-    → QUIC/UDP → SFU (forward only) → QUIC/UDP
-    → AES-256-GCM Decrypt → Opus Decode → Speaker
+```mermaid
+flowchart LR
+    Mic["🎤 Mic"] --> NS["Noise\nSuppression"]
+    NS --> Enc["Opus\nEncode"]
+    Enc --> AES1["🔒 AES-256-GCM\nEncrypt"]
+    AES1 -- "QUIC/UDP" --> SFU["📡 SFU\n(forward only)"]
+    SFU -- "QUIC/UDP" --> AES2["🔓 AES-256-GCM\nDecrypt"]
+    AES2 --> Dec["Opus\nDecode"]
+    Dec --> Spk["🔊 Speaker"]
 ```
 
 ### Encryption Model

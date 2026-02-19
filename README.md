@@ -31,23 +31,46 @@ Antarcticom is a **Discord / TeamSpeak alternative** built from the ground up wi
 ## Architecture
 
 ```mermaid
-graph LR
-    Client["🖥️ Flutter Client"]
-    Standalone["🏠 Standalone Server"]
-    AuthHub["🔐 Auth Hub"]
-    Community["🌐 Community Server"]
+graph TB
+    Client["🖥️ Flutter Client<br/><i>Windows · Android · Web</i>"]
 
-    Client -- "HTTPS + WS" --> Standalone
-    Client -- "HTTPS + WS" --> Community
+    subgraph Standalone["🏠 Standalone (all-in-one)"]
+        S_Auth["Auth + JWT Signing"]
+        S_Community["Community Features"]
+        S_Data[("PostgreSQL + Redis")]
+        S_Auth --- S_Community
+        S_Community --- S_Data
+    end
+
+    subgraph Federated["🌐 Federated Deployment"]
+        AuthHub["🔐 Auth Hub<br/><i>Signs RS256 JWTs</i>"]
+        Community["🌐 Community Server<br/><i>Verifies tokens locally</i>"]
+        AH_DB[("Users DB")]
+        CS_DB[("Servers DB")]
+        AuthHub --- AH_DB
+        Community --- CS_DB
+        Community -- "GET /api/auth/public-key" --> AuthHub
+    end
+
+    Client -- "HTTPS + WS + QUIC" --> Standalone
     Client -- "Login / Register" --> AuthHub
-    Community -- "GET /api/auth/public-key" --> AuthHub
-    AuthHub -- "Signs RS256 JWTs" --> AuthHub
-    Community -- "Verifies tokens locally" --> Community
+    Client -- "HTTPS + WS + QUIC" --> Community
 ```
 
-**Standalone** mode combines Auth Hub + Community into a single process (great for dev and small deploys). For federation, split into separate Auth Hub and Community instances.
+Choose **Standalone** for dev or small deploys (single process). For federation, split into **Auth Hub** + one or more **Community** servers — community servers verify tokens using the Auth Hub's public key with no shared secrets.
 
 ## Quick Start
+
+### 🏠 Host a Community Server
+
+This is what most people want — host your own server, users log in via an Auth Hub:
+
+```bash
+AUTH_HUB_URL=https://your-auth-hub.com \
+  docker compose -f docker/docker-compose.community.yml up -d
+```
+
+Your server verifies tokens using the Auth Hub's public key — no secrets, no user management needed.
 
 ### 🖥 Download the Client
 
@@ -57,16 +80,9 @@ Pre-built binaries on the [Releases](https://github.com/ItsKorayYT/antarcticom/r
 cd client && flutter pub get && flutter run -d windows
 ```
 
-### 🏠 Host a Community Server
-
-Point `AUTH_HUB_URL` to any Auth Hub (the official one or your own):
-
-```bash
-AUTH_HUB_URL=https://your-auth-hub.com \
-  docker compose -f docker/docker-compose.community.yml up -d
-```
-
 ### 🔐 Run a Standalone Server (Auth + Community)
+
+For a fully self-contained instance (dev, small groups, or private deployments):
 
 ```bash
 docker compose -f docker/docker-compose.yml up -d
@@ -75,7 +91,7 @@ docker compose -f docker/docker-compose.yml up -d
 RSA keys for JWT signing are auto-generated on first startup.
 
 > [!WARNING]
-> Running your own Auth Hub creates a **separate user pool**. Users registered on one Auth Hub cannot authenticate with community servers linked to a different Auth Hub. This is by design (similar to Matrix homeservers) and is the expected choice for private or corporate deployments.
+> Running your own standalone server creates a **separate user pool**. Users registered on one Auth Hub cannot authenticate with community servers linked to a different Auth Hub. This is by design (similar to Matrix homeservers) and is the expected choice for private or corporate deployments.
 
 ### 🛠 Development
 
