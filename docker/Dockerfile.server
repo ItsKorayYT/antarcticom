@@ -51,6 +51,9 @@ COPY server/antarcticom.toml ./antarcticom.toml
 # Copy migrations
 COPY server/migrations/ ./migrations/
 
+# Create key directory with correct ownership so the non-root user can write
+RUN mkdir -p /app/data/keys && chown -R antarcticom:antarcticom /app/data
+
 # Switch to non-root user
 USER antarcticom
 
