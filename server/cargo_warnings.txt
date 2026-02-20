@@ -1,0 +1,47 @@
+warning: field `tls` is never read
+  --> src\config.rs:36:9
+   |
+29 | pub struct AppConfig {
+   |            --------- field in this struct
+...
+36 |     pub tls: TlsConfig,
+   |         ^^^
+   |
+   = note: `AppConfig` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `nonce` is never read
+   --> src\models.rs:123:9
+    |
+121 | pub struct SendMessageRequest {
+    |            ------------------ field in this struct
+122 |     pub content: String,
+123 |     pub nonce: Option<String>,
+    |         ^^^^^
+    |
+    = note: `SendMessageRequest` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `typing` is never read
+  --> src\presence.rs:17:5
+   |
+13 | pub struct PresenceManager {
+   |            --------------- field in this struct
+...
+17 |     typing: Arc<DashMap<Uuid, HashMap<Uuid, tokio::time::Instant>>>,
+   |     ^^^^^^
+
+warning: methods `set_typing`, `get_typing`, and `cleanup_loop` are never used
+  --> src\presence.rs:48:12
+   |
+20 | impl PresenceManager {
+   | -------------------- methods in this implementation
+...
+48 |     pub fn set_typing(&self, channel_id: Uuid, user_id: Uuid) {
+   |            ^^^^^^^^^^
+...
+56 |     pub fn get_typing(&self, channel_id: &Uuid) -> Vec<Uuid> {
+   |            ^^^^^^^^^^
+...
+75 |     pub async fn cleanup_loop(self: Arc<Self>) {
+   |                  ^^^^^^^^^^^^
+

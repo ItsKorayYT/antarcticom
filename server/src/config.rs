@@ -33,6 +33,7 @@ pub struct AppConfig {
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
     pub voice: VoiceConfig,
+    #[allow(dead_code)]
     pub tls: TlsConfig,
     pub auth: AuthConfig,
     pub identity: IdentityConfig,
@@ -57,6 +58,7 @@ pub struct RedisConfig {
     pub url: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct VoiceConfig {
     pub host: String,
@@ -66,6 +68,7 @@ pub struct VoiceConfig {
     pub max_bitrate: u32,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct TlsConfig {
     pub cert_path: String,
@@ -74,6 +77,7 @@ pub struct TlsConfig {
     pub acme_domain: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct AuthConfig {
     /// Path to the RSA private key PEM (required for Auth Hub / Standalone).
@@ -84,6 +88,7 @@ pub struct AuthConfig {
     pub allow_local_registration: bool,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct IdentityConfig {
     pub federation_enabled: bool,
@@ -93,6 +98,7 @@ pub struct IdentityConfig {
     pub auth_hub_url: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct LoggingConfig {
     pub level: String,

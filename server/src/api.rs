@@ -591,10 +591,21 @@ async fn instance_info(
         ServerMode::Community => "community",
         ServerMode::Standalone => "standalone",
     };
+    
+    let mut default_server_id = None;
+    if !state.config.is_auth_hub() {
+        if let Ok(servers) = db::servers::list_all(&state.db).await {
+            if let Some(first) = servers.first() {
+                default_server_id = Some(first.id);
+            }
+        }
+    }
+
     Json(serde_json::json!({
         "mode": mode_str,
         "name": state.config.server.public_url,
         "version": env!("CARGO_PKG_VERSION"),
+        "default_server_id": default_server_id,
     }))
 }
 
@@ -662,9 +673,20 @@ async fn join_server(
     auth: AuthUser,
     Path(server_id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
+    // 1. Check if the server is currently "unclaimed" (owned by the dummy system user)
+    let system_owner_id = Uuid::parse_str("00000000-0000-7000-8000-000000000000").unwrap();
+    if let Ok(Some(server)) = db::servers::find_by_id(&state.db, server_id).await {
+        if server.owner_id == system_owner_id {
+            // First user to join the default server claims it
+            tracing::info!("User {} is claiming the default server {}", auth.user_id, server_id);
+            db::servers::transfer_ownership(&state.db, server_id, auth.user_id).await?;
+        }
+    }
+
+    // 2. Add the user as a member
     db::members::add(&state.db, auth.user_id, server_id).await?;
 
-    // Broadcast MemberJoin to all connected server members
+    // 3. Broadcast MemberJoin to all connected server members
     if let Ok(Some(user)) = db::users::find_by_id(&state.db, auth.user_id).await {
         let event = WsEvent::MemberJoin {
             server_id,

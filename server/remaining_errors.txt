@@ -1,0 +1,4 @@
+﻿errors.txt -Raw; $l ...
+error[E0433]: failed to resolve: could not find `bans` 
+error[E0433]: failed to resolve: could not find `bans` 
+error: could not compile `antarcticom-server` (bin 

@@ -183,6 +183,20 @@ pub mod servers {
         .await?;
         Ok(servers)
     }
+
+    /// Transfer ownership of a server to a new user.
+    pub async fn transfer_ownership(
+        pool: &PgPool,
+        server_id: Uuid,
+        new_owner_id: Uuid,
+    ) -> AppResult<()> {
+        sqlx::query("UPDATE servers SET owner_id = $2 WHERE id = $1")
+            .bind(server_id)
+            .bind(new_owner_id)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
 }
 
 // ─── Channel Queries ────────────────────────────────────────────────────────

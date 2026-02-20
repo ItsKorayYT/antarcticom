@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Crypto module — End-to-End Encryption engine.
 ///
 /// Implements:

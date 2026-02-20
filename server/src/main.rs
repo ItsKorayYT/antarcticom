@@ -49,13 +49,10 @@ async fn main() -> Result<()> {
     db::run_migrations(&db_pool).await?;
     tracing::info!("Migrations complete");
 
-    // Seed default server only in standalone mode
+    // Seed default server for standalone and community modes
     match config.mode {
-        config::ServerMode::Standalone => {
+        config::ServerMode::Standalone | config::ServerMode::Community => {
             seed_default_server(&db_pool).await?;
-        }
-        config::ServerMode::Community => {
-            tracing::info!("Community mode — skipping default server seed");
         }
         config::ServerMode::AuthHub => {
             tracing::info!("Auth hub mode — no community data to seed");

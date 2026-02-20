@@ -1,0 +1,7 @@
+﻿warning: field `tls` is never read
+  --> src\config.rs:36:9
+warning: field `nonce` is never read
+warning: field `typing` is never read
+  --> src\presence.rs:17:5
+warning: methods `set_typing`, `get_typing`, and `cleanup_loop` are never used
+  --> src\presence.rs:48:12

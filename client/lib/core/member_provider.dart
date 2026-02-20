@@ -5,6 +5,7 @@ import 'auth_provider.dart';
 import 'role_provider.dart';
 import 'server_provider.dart';
 import 'models/member.dart';
+import 'models/user.dart';
 import 'models/permissions.dart';
 
 class CurrentMemberNotifier extends StateNotifier<AsyncValue<Member>> {
@@ -129,8 +130,41 @@ class ServerMembersNotifier extends StateNotifier<AsyncValue<List<Member>>> {
           }
         });
       }
+    } else if (event.type == 'MemberJoin') {
+      final eventServerId = event.data?['server_id'] as String?;
+      final userData = event.data?['user'] as Map<String, dynamic>?;
+
+      if (eventServerId == serverId && userData != null) {
+        state.whenData((members) {
+          // Avoid duplicates
+          final userId = userData['id'] as String?;
+          if (userId != null && !members.any((m) => m.userId == userId)) {
+            final newMember = Member(
+              userId: userId,
+              serverId: serverId,
+              joinedAt: DateTime.now(),
+              roles: [],
+              user: User.fromJson(userData),
+              status: 'online',
+            );
+            final newMembers = List<Member>.from(members)..add(newMember);
+            state = AsyncValue.data(newMembers);
+          }
+        });
+      }
+    } else if (event.type == 'MemberLeave') {
+      final eventServerId = event.data?['server_id'] as String?;
+      final userId = event.data?['user_id'] as String?;
+
+      if (eventServerId == serverId && userId != null) {
+        state.whenData((members) {
+          final newMembers = members.where((m) => m.userId != userId).toList();
+          if (newMembers.length != members.length) {
+            state = AsyncValue.data(newMembers);
+          }
+        });
+      }
     }
-    // Also handle MemberJoin/Leave if desired
   }
 }
 

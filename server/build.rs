@@ -1,6 +1,6 @@
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Compile protobuf definitions
-    prost_build::compile_protos(
+fn main() {
+    // Compile protobuf definitions (optional — requires protoc)
+    if let Err(e) = prost_build::compile_protos(
         &[
             "../proto/messages.proto",
             "../proto/voice.proto",
@@ -8,6 +8,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "../proto/events.proto",
         ],
         &["../proto/"],
-    )?;
-    Ok(())
+    ) {
+        println!("cargo:warning=Skipping protobuf compilation: {e}");
+        println!("cargo:warning=Install protoc if you need proto support.");
+    }
 }

@@ -1,0 +1,35 @@
+﻿unused_imports: unused import: `anyhow::Result` in src\presence.rs:1
+dead_code: field `redis` is never read in src\api.rs:54
+dead_code: constant `MAX_MESSAGE_LENGTH` is never used in src\chat.rs:15
+dead_code: constant `MAX_REACTIONS_PER_MESSAGE` is never used in src\chat.rs:18
+dead_code: function `validate_message` is never used in src\chat.rs:21
+dead_code: function `parse_mentions` is never used in src\chat.rs:38
+dead_code: enum `MentionType` is never used in src\chat.rs:74
+dead_code: function `sanitize_content` is never used in src\chat.rs:81
+dead_code: field `tls` is never read in src\config.rs:29
+dead_code: fields `max_sessions`, `min_bitrate`, and `max_bitrate` are never read in src\config.rs:61
+dead_code: fields `cert_path`, `key_path`, `acme_enabled`, and `acme_domain` are never read in src\config.rs:70
+dead_code: field `allow_local_registration` is never read in src\config.rs:78
+dead_code: field `federation_enabled` is never read in src\config.rs:88
+dead_code: struct `IdentityKeyPair` is never constructed in src\crypto.rs:21
+dead_code: associated items `generate`, `public_key`, and `sign` are never used in src\crypto.rs:25
+dead_code: function `verify_signature` is never used in src\crypto.rs:48
+dead_code: struct `PreKeyBundle` is never constructed in src\crypto.rs:57
+dead_code: function `encrypt_aes256gcm` is never used in src\crypto.rs:73
+dead_code: function `decrypt_aes256gcm` is never used in src\crypto.rs:95
+dead_code: function `encrypt_voice_frame` is never used in src\crypto.rs:120
+dead_code: function `decrypt_voice_frame` is never used in src\crypto.rs:142
+dead_code: function `derive_key` is never used in src\crypto.rs:166
+dead_code: function `upsert_federated` is never used in src\db.rs:93
+dead_code: function `update_content` is never used in src\db.rs:344
+dead_code: variant `RateLimited` is never constructed in src\error.rs:9
+dead_code: field `nonce` is never read in src\models.rs:120
+dead_code: struct `EditMessageRequest` is never constructed in src\models.rs:127
+dead_code: associated items `KICK_MEMBERS`, `BAN_MEMBERS`, `bits`, `add`, and `remove` are never used in src\models.rs:166
+dead_code: struct `Reaction` is never constructed in src\models.rs:211
+dead_code: field `typing` is never read in src\presence.rs:14
+dead_code: methods `set_typing`, `get_typing`, and `cleanup_loop` are never used in src\presence.rs:21
+dead_code: fields `channel_id` and `participants` are never read in src\voice.rs:15
+dead_code: fields `user_id`, `muted`, `deafened`, `speaking`, and `ssrc` are never read in src\voice.rs:21
+dead_code: fields `sessions`, `next_ssrc`, and `config` are never read in src\voice.rs:35
+dead_code: methods `join_channel`, `leave_channel`, `update_state`, `get_participants`, and `active_session_count` are never used in src\voice.rs:44

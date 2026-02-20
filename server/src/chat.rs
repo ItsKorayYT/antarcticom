@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Chat module — message processing, formatting, and real-time distribution.
 ///
 /// This module handles the business logic layer between the API handlers

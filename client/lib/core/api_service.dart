@@ -93,6 +93,10 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<void> joinServer(String serverId) async {
+    await _dio.post('/api/servers/$serverId/join');
+  }
+
   // ─── Roles ──────────────────────────────────────────────────────────
 
   Future<List<dynamic>> listRoles(String serverId) async {

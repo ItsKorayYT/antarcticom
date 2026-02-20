@@ -123,6 +123,19 @@ class ConnectionManager extends ChangeNotifier {
     _createConnection(normalised);
     await _persistHosts();
 
+    // Auto-join the default server if we have a token
+    final defaultServerId = info['default_server_id'] as String?;
+    if (defaultServerId != null && _token != null) {
+      try {
+        final api = _communityApis[normalised];
+        if (api != null) {
+          await api.joinServer(defaultServerId);
+        }
+      } catch (e) {
+        debugPrint('Failed to auto-join default server: $e');
+      }
+    }
+
     notifyListeners();
     return info;
   }

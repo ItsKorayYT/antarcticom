@@ -1,4 +1,3 @@
-use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -15,6 +14,7 @@ pub struct PresenceManager {
     /// user_id → current status
     statuses: Arc<DashMap<Uuid, PresenceStatus>>,
     /// channel_id → set of currently-typing user_ids
+    #[allow(dead_code)]
     typing: Arc<DashMap<Uuid, HashMap<Uuid, tokio::time::Instant>>>,
 }
 
@@ -46,6 +46,7 @@ impl PresenceManager {
 
     /// Mark a user as typing in a channel.
     /// Typing indicators expire after 8 seconds.
+    #[allow(dead_code)]
     pub fn set_typing(&self, channel_id: Uuid, user_id: Uuid) {
         self.typing
             .entry(channel_id)
@@ -54,6 +55,7 @@ impl PresenceManager {
     }
 
     /// Get all currently-typing users in a channel (excluding expired).
+    #[allow(dead_code)]
     pub fn get_typing(&self, channel_id: &Uuid) -> Vec<Uuid> {
         let cutoff = tokio::time::Instant::now() - std::time::Duration::from_secs(8);
         if let Some(mut entry) = self.typing.get_mut(channel_id) {
@@ -73,6 +75,7 @@ impl PresenceManager {
     }
 
     /// Run periodic cleanup of expired typing indicators.
+    #[allow(dead_code)]
     pub async fn cleanup_loop(self: Arc<Self>) {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
         loop {
