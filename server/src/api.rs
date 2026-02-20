@@ -1102,7 +1102,7 @@ async fn ws_upgrade(
     ws.on_upgrade(move |socket| handle_ws(socket, state))
 }
 
-use futures::{SinkExt, StreamExt};
+use futures_util::{SinkExt, StreamExt};
 
 async fn handle_ws(mut socket: WebSocket, state: AppState) {
     // Wait for Identify message with token
