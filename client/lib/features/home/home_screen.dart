@@ -165,6 +165,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ref.watch(permissionsProvider(selectedServerId));
                         final canManageServer =
                             perms.has(Permissions.manageServer);
+                        final auth = ref.watch(authProvider);
+                        final server = ref
+                            .watch(serversProvider)
+                            .servers
+                            .where((s) => s.id == selectedServerId)
+                            .firstOrNull;
+                        final isOwner =
+                            server != null && server.ownerId == auth.user?.id;
 
                         return PopupMenuButton<String>(
                           icon: const Icon(Icons.expand_more,
@@ -236,11 +244,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 value: 'roles',
                                 child: Text('Server Roles'),
                               ),
-                            const PopupMenuItem(
-                              value: 'leave',
-                              child: Text('Leave Server',
-                                  style: TextStyle(color: Colors.redAccent)),
-                            ),
+                            if (!isOwner)
+                              const PopupMenuItem(
+                                value: 'leave',
+                                child: Text('Leave Server',
+                                    style: TextStyle(color: Colors.redAccent)),
+                              ),
                           ],
                         );
                       },

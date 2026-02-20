@@ -4,6 +4,7 @@ import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
 import '../../core/message_provider.dart';
 import '../../core/channel_provider.dart';
+import '../../core/server_provider.dart';
 import '../../core/settings_provider.dart';
 import '../home/rainbow_builder.dart';
 
@@ -57,6 +58,9 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
     final auth = ref.watch(authProvider);
     final channelsState = ref.watch(channelsProvider);
     final settings = ref.watch(settingsProvider);
+    final serversState = ref.watch(serversProvider);
+    final isOwner = serversState.servers
+        .any((s) => s.id == widget.serverId && s.ownerId == auth.user?.id);
 
     // Find channel name
     final channelName = channelsState.channels
@@ -167,6 +171,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                               return _MessageBubble(
                                 message: msg,
                                 isOwn: isOwn,
+                                canDelete: isOwn || isOwner,
                                 authorName: isOwn
                                     ? (auth.user?.displayName ?? 'You')
                                     : (msg.author?.displayName ??
@@ -280,12 +285,14 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
 class _MessageBubble extends StatelessWidget {
   final MessageInfo message;
   final bool isOwn;
+  final bool canDelete;
   final String authorName;
   final VoidCallback onDelete;
 
   const _MessageBubble({
     required this.message,
     required this.isOwn,
+    required this.canDelete,
     required this.authorName,
     required this.onDelete,
   });
@@ -323,7 +330,9 @@ class _MessageBubble extends StatelessWidget {
         vertical: 2,
       ),
       child: GestureDetector(
-        onLongPress: () => _showOptions(context),
+        onLongPress: canDelete && !message.isDeleted
+            ? () => _showOptions(context)
+            : null,
         child: MouseRegion(
           child: Container(
             padding: const EdgeInsets.symmetric(
@@ -390,14 +399,25 @@ class _MessageBubble extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        message.content,
-                        style: const TextStyle(
-                          color: AntarcticomTheme.textPrimary,
-                          fontSize: 14,
-                          height: 1.4,
+                      if (message.isDeleted)
+                        const Text(
+                          'Message deleted',
+                          style: TextStyle(
+                            color: AntarcticomTheme.textMuted,
+                            fontSize: 14,
+                            height: 1.4,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        )
+                      else
+                        Text(
+                          message.content,
+                          style: const TextStyle(
+                            color: AntarcticomTheme.textPrimary,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

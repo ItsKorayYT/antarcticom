@@ -12,6 +12,7 @@ class MessageInfo {
   final String content;
   final String createdAt;
   final String? editedAt;
+  final bool isDeleted;
   final User? author;
 
   const MessageInfo({
@@ -21,6 +22,7 @@ class MessageInfo {
     required this.content,
     required this.createdAt,
     this.editedAt,
+    this.isDeleted = false,
     this.author,
   });
 
@@ -32,6 +34,7 @@ class MessageInfo {
       content: json['content'] as String,
       createdAt: json['created_at'] as String,
       editedAt: json['edited_at'] as String?,
+      isDeleted: json['is_deleted'] as bool? ?? false,
       author: json['author'] != null
           ? User.fromJson(json['author'] as Map<String, dynamic>)
           : null,
@@ -55,6 +58,23 @@ class MessageInfo {
     } catch (_) {
       return createdAt;
     }
+  }
+
+  MessageInfo copyWith({
+    String? content,
+    String? editedAt,
+    bool? isDeleted,
+  }) {
+    return MessageInfo(
+      id: id,
+      channelId: channelId,
+      authorId: authorId,
+      content: content ?? this.content,
+      createdAt: createdAt,
+      editedAt: editedAt ?? this.editedAt,
+      isDeleted: isDeleted ?? this.isDeleted,
+      author: author,
+    );
   }
 }
 
@@ -128,7 +148,8 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     } else if (event.type == 'MessageDelete' && event.data != null) {
       try {
         final messageId = event.data!['message_id'] as int;
-        _removeMessage(messageId);
+        // Instead of removing it completely, we update it as deleted
+        _markMessageDeleted(messageId);
       } catch (e) {
         // print('Error processing MessageDelete: $e');
       }
@@ -144,9 +165,14 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     state = MessagesState(messages: [...state.messages, msg]);
   }
 
-  void _removeMessage(int messageId) {
+  void _markMessageDeleted(int messageId) {
     state = MessagesState(
-      messages: state.messages.where((m) => m.id != messageId).toList(),
+      messages: state.messages.map((m) {
+        if (m.id == messageId) {
+          return m.copyWith(isDeleted: true, content: '');
+        }
+        return m;
+      }).toList(),
       isLoading: state.isLoading,
       error: state.error,
     );

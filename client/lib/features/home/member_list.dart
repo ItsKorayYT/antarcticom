@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme.dart';
 import '../../core/models/member.dart';
+import '../../core/models/permissions.dart';
 import '../../core/member_provider.dart';
 import '../../core/api_service.dart';
+import '../../core/auth_provider.dart';
 
 class MemberList extends ConsumerWidget {
   final String serverId;
@@ -143,6 +145,16 @@ class _MemberItem extends ConsumerWidget {
     ];
     final d = member.joinedAt;
     final joinedDate = '${months[d.month - 1]} ${d.day}, ${d.year}';
+
+    // Check permissions for the current user
+    final perms = ref.watch(permissionsProvider(member.serverId));
+    final canKick = perms.has(Permissions.kickMembers);
+    final canBan = perms.has(Permissions.banMembers);
+    final canManageRoles = perms.has(Permissions.administrator);
+
+    // Ensure we don't show these actions on ourselves
+    final auth = ref.watch(authProvider);
+    final isSelf = auth.user?.id == member.userId;
 
     showDialog(
       context: context,
@@ -298,58 +310,124 @@ class _MemberItem extends ConsumerWidget {
                           ],
                         ),
 
-                        // Admin Actions (Assuming for now we show them, but could check permissions later)
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            TextButton.icon(
-                              onPressed: () async {
-                                final api = ref.read(apiServiceProvider);
-                                try {
-                                  await api.kickMember(
-                                      member.serverId, member.userId);
-                                  if (context.mounted) Navigator.pop(context);
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              'Failed to kick member. Missing permissions?')),
-                                    );
-                                  }
-                                }
-                              },
-                              icon: const Icon(Icons.person_remove,
-                                  size: 18, color: Colors.orange),
-                              label: const Text('Kick',
-                                  style: TextStyle(color: Colors.orange)),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton.icon(
-                              onPressed: () async {
-                                final api = ref.read(apiServiceProvider);
-                                try {
-                                  await api.banMember(
-                                      member.serverId, member.userId);
-                                  if (context.mounted) Navigator.pop(context);
-                                } catch (e) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                          content: Text(
-                                              'Failed to ban member. Missing permissions?')),
-                                    );
-                                  }
-                                }
-                              },
-                              icon: const Icon(Icons.block,
-                                  size: 18, color: Colors.redAccent),
-                              label: const Text('Ban',
-                                  style: TextStyle(color: Colors.redAccent)),
-                            ),
-                          ],
-                        ),
+                        // Admin Actions
+                        if (!isSelf &&
+                            (canKick || canBan || canManageRoles)) ...[
+                          const SizedBox(height: 24),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            alignment: WrapAlignment.end,
+                            children: [
+                              if (canManageRoles)
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    final api = ref.read(apiServiceProvider);
+                                    try {
+                                      final roles =
+                                          await api.listRoles(member.serverId);
+                                      var adminRole = roles
+                                          .where(
+                                            (r) =>
+                                                ((r['permissions'] as int) &
+                                                    32) !=
+                                                0,
+                                          )
+                                          .firstOrNull;
+
+                                      if (adminRole == null) {
+                                        adminRole = await api.createRole(
+                                          member.serverId,
+                                          "Admin",
+                                          32, // Administrator permission
+                                          0, // default color
+                                          100, // high position
+                                        );
+                                      }
+                                      await api.assignRole(
+                                          member.serverId,
+                                          member.userId,
+                                          adminRole['id'] as String);
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                              content: Text(
+                                                  'User promoted to Admin!')),
+                                        );
+                                        Navigator.pop(context);
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                              content: Text(
+                                                  'Failed to make user an Admin.')),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(Icons.admin_panel_settings,
+                                      size: 18, color: Colors.blueAccent),
+                                  label: const Text('Make Admin',
+                                      style:
+                                          TextStyle(color: Colors.blueAccent)),
+                                ),
+                              if (canKick)
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    final api = ref.read(apiServiceProvider);
+                                    try {
+                                      await api.kickMember(
+                                          member.serverId, member.userId);
+                                      if (context.mounted)
+                                        Navigator.pop(context);
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                              content: Text(
+                                                  'Failed to kick member. Missing permissions?')),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(Icons.person_remove,
+                                      size: 18, color: Colors.orange),
+                                  label: const Text('Kick',
+                                      style: TextStyle(color: Colors.orange)),
+                                ),
+                              if (canBan)
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    final api = ref.read(apiServiceProvider);
+                                    try {
+                                      await api.banMember(
+                                          member.serverId, member.userId);
+                                      if (context.mounted)
+                                        Navigator.pop(context);
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                              content: Text(
+                                                  'Failed to ban member. Missing permissions?')),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(Icons.block,
+                                      size: 18, color: Colors.redAccent),
+                                  label: const Text('Ban',
+                                      style:
+                                          TextStyle(color: Colors.redAccent)),
+                                ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
