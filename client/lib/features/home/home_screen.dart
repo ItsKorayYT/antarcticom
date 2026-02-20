@@ -447,39 +447,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         horizontal: AntarcticomTheme.spacingSm,
       ),
       children: [
-        if (channels.textChannels.isNotEmpty) ...[
-          _ChannelCategory(
-            name: 'TEXT CHANNELS',
-            onAdd: () => _showCreateChannelDialog(context, selectedServerId),
-            serverId: selectedServerId,
-          ),
-          ...channels.textChannels.map((ch) => _ChannelItem(
-                name: ch.name,
-                icon: Icons.tag,
-                isActive: selectedChannelId == ch.id,
-                onTap: () => _selectChannel(ch.id),
-                onDelete: () => _showDeleteChannelDialog(
-                    context, selectedServerId, ch.id, ch.name),
-              )),
-        ],
-        if (channels.voiceChannels.isNotEmpty) ...[
-          const SizedBox(height: AntarcticomTheme.spacingMd),
-          _ChannelCategory(
-            name: 'VOICE CHANNELS',
-            onAdd: () => _showCreateChannelDialog(context, selectedServerId,
-                isVoice: true),
-            serverId: selectedServerId,
-          ),
-          ...channels.voiceChannels.map((ch) => _ChannelItem(
-                name: ch.name,
-                icon: Icons.volume_up,
-                isVoice: true,
-                isActive: selectedChannelId == ch.id,
-                onTap: () {},
-                onDelete: () => _showDeleteChannelDialog(
-                    context, selectedServerId, ch.id, ch.name),
-              )),
-        ],
+        _ChannelCategory(
+          name: 'TEXT CHANNELS',
+          onAdd: () => _showCreateChannelDialog(context, selectedServerId),
+          serverId: selectedServerId,
+        ),
+        ...channels.textChannels.map((ch) => _ChannelItem(
+              name: ch.name,
+              icon: Icons.tag,
+              isActive: selectedChannelId == ch.id,
+              onTap: () => _selectChannel(ch.id),
+              onDelete: () => _showDeleteChannelDialog(
+                  context, selectedServerId, ch.id, ch.name),
+            )),
+        const SizedBox(height: AntarcticomTheme.spacingMd),
+        _ChannelCategory(
+          name: 'VOICE CHANNELS',
+          onAdd: () => _showCreateChannelDialog(context, selectedServerId,
+              isVoice: true),
+          serverId: selectedServerId,
+        ),
+        ...channels.voiceChannels.map((ch) => _ChannelItem(
+              name: ch.name,
+              icon: Icons.volume_up,
+              isVoice: true,
+              isActive: selectedChannelId == ch.id,
+              onTap: () {},
+              onDelete: () => _showDeleteChannelDialog(
+                  context, selectedServerId, ch.id, ch.name),
+            )),
       ],
     );
   }

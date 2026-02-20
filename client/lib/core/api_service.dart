@@ -206,7 +206,7 @@ class ApiService {
       String serverId, String name, String type) async {
     final response = await _dio.post(
       '/api/servers/$serverId/channels',
-      data: {'name': name, 'type': type},
+      data: {'name': name, 'channel_type': type},
     );
     return response.data as Map<String, dynamic>;
   }

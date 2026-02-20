@@ -28,8 +28,8 @@ class ChannelInfo {
     );
   }
 
-  bool get isText => channelType == 'Text';
-  bool get isVoice => channelType == 'Voice';
+  bool get isText => channelType.toLowerCase() == 'text';
+  bool get isVoice => channelType.toLowerCase() == 'voice';
 }
 
 // ─── State ──────────────────────────────────────────────────────────────
