@@ -65,6 +65,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       Future.microtask(() => _selectChannel(channels.textChannels.first.id));
     }
 
+    // Handle kicking / leaving the currently selected server
+    ref.listen<ServersState>(serversProvider, (previous, next) {
+      if (!next.isLoading && selectedServerId != null) {
+        final serverExists = next.servers.any((s) => s.id == selectedServerId);
+        if (!serverExists) {
+          Future.microtask(() {
+            ref.read(selectedServerIdProvider.notifier).state = null;
+            ref.read(channelsProvider.notifier).clear();
+            ref.read(selectedChannelIdProvider.notifier).state = null;
+            if (context.mounted) {
+              context.go('/channels/@me');
+            }
+          });
+        }
+      }
+    });
+
     // ─── Component Builders ─────────────────────────────────────────────
 
     // 1. Taskbar (Server List)

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_service.dart';
+import 'auth_provider.dart';
 import 'connection_manager.dart';
 import 'socket_service.dart';
 
@@ -76,8 +77,9 @@ class ServersNotifier extends StateNotifier<ServersState> {
   final ApiService _api;
   final ConnectionManager _connMgr;
   final SocketService _socket;
+  final String? _currentUserId;
 
-  ServersNotifier(this._api, this._connMgr, this._socket)
+  ServersNotifier(this._api, this._connMgr, this._socket, this._currentUserId)
       : super(const ServersState()) {
     _socket.events.listen(_handleEvent);
   }
@@ -102,6 +104,16 @@ class ServersNotifier extends StateNotifier<ServersState> {
           );
           state = state.copyWith(servers: newServers);
         }
+      }
+    } else if (event.type == 'MemberJoin') {
+      final userId = event.data?['user']?['id'] as String?;
+      if (userId != null && userId == _currentUserId) {
+        fetchServers();
+      }
+    } else if (event.type == 'MemberLeave') {
+      final userId = event.data?['user_id'] as String?;
+      if (userId != null && userId == _currentUserId) {
+        fetchServers();
       }
     }
   }
@@ -183,7 +195,8 @@ final serversProvider =
   final api = ref.watch(apiServiceProvider);
   final connMgr = ref.watch(connectionManagerProvider);
   final socket = ref.watch(socketServiceProvider);
-  return ServersNotifier(api, connMgr, socket);
+  final userId = ref.watch(authProvider).user?.id;
+  return ServersNotifier(api, connMgr, socket, userId);
 });
 
 /// Currently selected server ID.
