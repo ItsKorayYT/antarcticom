@@ -119,7 +119,8 @@ class _MemberItem extends ConsumerWidget {
     }
   }
 
-  void _showUserProfile(BuildContext context, String? avatarUrl) {
+  void _showUserProfile(
+      BuildContext context, WidgetRef ref, String? avatarUrl) {
     final user = member.user;
     final name =
         member.nickname ?? user?.displayName ?? user?.username ?? 'Unknown';
@@ -296,6 +297,59 @@ class _MemberItem extends ConsumerWidget {
                             ),
                           ],
                         ),
+
+                        // Admin Actions (Assuming for now we show them, but could check permissions later)
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton.icon(
+                              onPressed: () async {
+                                final api = ref.read(apiServiceProvider);
+                                try {
+                                  await api.kickMember(
+                                      member.serverId, member.userId);
+                                  if (context.mounted) Navigator.pop(context);
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Failed to kick member. Missing permissions?')),
+                                    );
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.person_remove,
+                                  size: 18, color: Colors.orange),
+                              label: const Text('Kick',
+                                  style: TextStyle(color: Colors.orange)),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton.icon(
+                              onPressed: () async {
+                                final api = ref.read(apiServiceProvider);
+                                try {
+                                  await api.banMember(
+                                      member.serverId, member.userId);
+                                  if (context.mounted) Navigator.pop(context);
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                          content: Text(
+                                              'Failed to ban member. Missing permissions?')),
+                                    );
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.block,
+                                  size: 18, color: Colors.redAccent),
+                              label: const Text('Ban',
+                                  style: TextStyle(color: Colors.redAccent)),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -354,7 +408,7 @@ class _MemberItem extends ConsumerWidget {
       ),
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      onTap: () => _showUserProfile(context, avatarUrl),
+      onTap: () => _showUserProfile(context, ref, avatarUrl),
     );
   }
 }

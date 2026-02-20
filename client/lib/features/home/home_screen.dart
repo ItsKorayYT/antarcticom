@@ -7,6 +7,7 @@ import '../../core/server_provider.dart';
 import '../../core/connection_manager.dart';
 import '../../core/channel_provider.dart';
 import '../../core/settings_provider.dart';
+import '../../core/api_service.dart';
 import 'background_manager.dart';
 import 'rainbow_builder.dart';
 import '../../core/member_provider.dart';
@@ -400,6 +401,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 icon: Icons.tag,
                 isActive: selectedChannelId == ch.id,
                 onTap: () => _selectChannel(ch.id),
+                onDelete: () => _showDeleteChannelDialog(
+                    context, selectedServerId, ch.id, ch.name),
               )),
         ],
         if (channels.voiceChannels.isNotEmpty) ...[
@@ -416,6 +419,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 isVoice: true,
                 isActive: selectedChannelId == ch.id,
                 onTap: () {},
+                onDelete: () => _showDeleteChannelDialog(
+                    context, selectedServerId, ch.id, ch.name),
               )),
         ],
       ],
@@ -595,6 +600,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showDeleteChannelDialog(BuildContext context, String serverId,
+      String channelId, String channelName) {
+    final perms = ref.read(permissionsProvider(serverId));
+    if (!perms.has(Permissions.manageChannels)) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AntarcticomTheme.bgSecondary,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.redAccent),
+                title: Text('Delete Channel #$channelName',
+                    style: const TextStyle(color: Colors.redAccent)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    final api = ref.read(apiServiceProvider);
+                    await api.deleteChannel(serverId, channelId);
+
+                    if (ref.read(selectedChannelIdProvider) == channelId) {
+                      ref.read(selectedChannelIdProvider.notifier).state = null;
+                      if (context.mounted) {
+                        context.go('/channels/$serverId');
+                      }
+                    }
+
+                    // Refresh channels
+                    ref.read(channelsProvider.notifier).fetchChannels(serverId);
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Failed to delete channel')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -858,12 +912,15 @@ class _ChannelItem extends StatefulWidget {
   final bool isActive;
   final bool isVoice;
   final VoidCallback onTap;
+  final VoidCallback? onDelete;
+
   const _ChannelItem({
     required this.name,
     required this.icon,
     this.isActive = false,
     this.isVoice = false,
     required this.onTap,
+    this.onDelete,
   });
   @override
   State<_ChannelItem> createState() => _ChannelItemState();
@@ -879,6 +936,8 @@ class _ChannelItemState extends State<_ChannelItem> {
       onExit: (_) => setState(() => _hovering = false),
       child: GestureDetector(
         onTap: widget.onTap,
+        onLongPress: widget.onDelete,
+        onSecondaryTap: widget.onDelete,
         child: AnimatedContainer(
           duration: AntarcticomTheme.animFast,
           margin: const EdgeInsets.symmetric(vertical: 1),

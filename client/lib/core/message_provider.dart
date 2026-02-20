@@ -125,6 +125,13 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       } catch (e) {
         // print('Error parsing message: $e');
       }
+    } else if (event.type == 'MessageDelete' && event.data != null) {
+      try {
+        final messageId = event.data!['message_id'] as int;
+        _removeMessage(messageId);
+      } catch (e) {
+        // print('Error processing MessageDelete: $e');
+      }
     }
   }
 
@@ -135,6 +142,24 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     if (state.messages.any((m) => m.id == msg.id)) return;
 
     state = MessagesState(messages: [...state.messages, msg]);
+  }
+
+  void _removeMessage(int messageId) {
+    state = MessagesState(
+      messages: state.messages.where((m) => m.id != messageId).toList(),
+      isLoading: state.isLoading,
+      error: state.error,
+    );
+  }
+
+  Future<bool> deleteMessage(String channelId, int messageId) async {
+    try {
+      await _api.deleteMessage(channelId, messageId);
+      // The socket event will trigger the actual removal
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   void clear() {

@@ -90,6 +90,7 @@ pub mod users {
     /// Upsert a user from federated auth hub data.
     /// Used by community servers to create or update local user records
     /// so that FK constraints (messages, members) work correctly.
+    #[allow(dead_code)]
     pub async fn upsert_federated(
         pool: &PgPool,
         id: Uuid,
@@ -229,6 +230,14 @@ pub mod channels {
         .await?;
         Ok(channels)
     }
+
+    pub async fn delete(pool: &PgPool, id: Uuid) -> AppResult<bool> {
+        let result = sqlx::query("DELETE FROM channels WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
+    }
 }
 
 // ─── Message Queries ────────────────────────────────────────────────────────
@@ -341,6 +350,7 @@ pub mod messages {
         Ok(messages)
     }
 
+    #[allow(dead_code)]
     pub async fn update_content(
         pool: &PgPool,
         id: i64,
@@ -629,5 +639,56 @@ pub mod roles {
         .fetch_optional(pool)
         .await?;
         Ok(role)
+    }
+}
+
+// ─── Ban Queries ────────────────────────────────────────────────────────────
+
+pub mod bans {
+    use sqlx::PgPool;
+    use uuid::Uuid;
+
+    use crate::error::AppResult;
+    use crate::models::Ban;
+
+    pub async fn create(
+        pool: &PgPool,
+        server_id: Uuid,
+        user_id: Uuid,
+        reason: Option<&str>,
+    ) -> AppResult<Ban> {
+        let ban = sqlx::query_as::<_, Ban>(
+            r#"
+            INSERT INTO bans (server_id, user_id, reason, banned_at)
+            VALUES ($1, $2, $3, NOW())
+            RETURNING *
+            "#,
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .bind(reason)
+        .fetch_one(pool)
+        .await?;
+        Ok(ban)
+    }
+
+    pub async fn find(pool: &PgPool, server_id: Uuid, user_id: Uuid) -> AppResult<Option<Ban>> {
+        let ban = sqlx::query_as::<_, Ban>(
+            "SELECT * FROM bans WHERE server_id = $1 AND user_id = $2",
+        )
+        .bind(server_id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await?;
+        Ok(ban)
+    }
+
+    pub async fn delete(pool: &PgPool, server_id: Uuid, user_id: Uuid) -> AppResult<bool> {
+        let result = sqlx::query("DELETE FROM bans WHERE server_id = $1 AND user_id = $2")
+            .bind(server_id)
+            .bind(user_id)
+            .execute(pool)
+            .await?;
+        Ok(result.rows_affected() > 0)
     }
 }

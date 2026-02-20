@@ -161,6 +161,18 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<void> kickMember(String serverId, String userId) async {
+    await _dio.delete('/api/servers/$serverId/members/$userId');
+  }
+
+  Future<void> banMember(String serverId, String userId,
+      {String? reason}) async {
+    await _dio.post(
+      '/api/servers/$serverId/bans/$userId',
+      data: {'reason': reason},
+    );
+  }
+
   // ─── Channels ───────────────────────────────────────────────────────
 
   Future<List<dynamic>> listChannels(String serverId) async {
@@ -175,6 +187,10 @@ class ApiService {
       data: {'name': name, 'type': type},
     );
     return response.data as Map<String, dynamic>;
+  }
+
+  Future<void> deleteChannel(String serverId, String channelId) async {
+    await _dio.delete('/api/servers/$serverId/channels/$channelId');
   }
 
   // ─── Messages ───────────────────────────────────────────────────────
@@ -194,6 +210,10 @@ class ApiService {
       data: {'content': content},
     );
     return response.data as Map<String, dynamic>;
+  }
+
+  Future<void> deleteMessage(String channelId, int messageId) async {
+    await _dio.delete('/api/channels/$channelId/messages/$messageId');
   }
 
   // ─── Avatars ─────────────────────────────────────────────────────────

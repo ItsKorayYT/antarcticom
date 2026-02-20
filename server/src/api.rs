@@ -53,6 +53,7 @@ async fn check_permission(
 #[derive(Clone)]
 pub struct AppState {
     pub db: DbPool,
+    #[allow(dead_code)]
     pub redis: Option<redis::Client>,
     pub config: AppConfig,
     pub snowflake: Arc<SnowflakeGenerator>,
@@ -98,6 +99,27 @@ impl AppState {
             for user_id in user_ids.iter() {
                 if let Some(sender) = self.ws_sessions.get(user_id) {
                     let _ = sender.send(json.clone());
+                }
+            }
+        }
+    }
+
+    /// Broadcast an event to all connected members of a server.
+    /// Deduplicates users who are subscribed to multiple channels in the same server.
+    pub async fn broadcast_to_server(&self, server_id: &Uuid, event: &WsEvent) {
+        // Collect unique user IDs across all channels in this server
+        let mut notified = std::collections::HashSet::new();
+        if let Ok(channels) = db::channels::list_for_server(&self.db, *server_id).await {
+            let json = serde_json::to_string(event).unwrap_or_default();
+            for channel in channels {
+                if let Some(user_ids) = self.channel_subs.get(&channel.id) {
+                    for user_id in user_ids.iter() {
+                        if notified.insert(*user_id) {
+                            if let Some(sender) = self.ws_sessions.get(user_id) {
+                                let _ = sender.send(json.clone());
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -282,6 +304,7 @@ pub fn build_router(state: AppState) -> Router {
             // Channels
             .route("/api/servers/:server_id/channels", post(create_channel))
             .route("/api/servers/:server_id/channels", get(list_channels))
+            .route("/api/servers/:server_id/channels/:channel_id", delete(delete_channel))
             // Roles
             .route("/api/servers/:server_id/roles", get(list_roles))
             .route("/api/servers/:server_id/roles", post(create_role))
@@ -289,7 +312,10 @@ pub fn build_router(state: AppState) -> Router {
             .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::put(assign_role))
             .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::delete(remove_role))
             .route("/api/servers/:server_id/members", get(list_members))
-            .route("/api/servers/:server_id/members/:user_id", get(get_member))
+            .route("/api/servers/:server_id/members/:user_id", get(get_member).delete(kick_member))
+            // Bans
+            .route("/api/servers/:server_id/bans", get(list_bans))
+            .route("/api/servers/:server_id/bans/:user_id", post(ban_member).delete(unban_member))
             // Messages
             .route("/api/channels/:channel_id/messages", post(send_message))
             .route("/api/channels/:channel_id/messages", get(get_messages))
@@ -451,8 +477,15 @@ async fn register(
 
     // Auto-join user to all existing servers (i.e. the default server)
     let all_servers = db::servers::list_all(&state.db).await?;
+    let user_public = UserPublic::from(user.clone());
     for server in &all_servers {
         let _ = db::members::add(&state.db, user.id, server.id).await;
+        // Broadcast MemberJoin so connected clients update their member lists
+        let event = WsEvent::MemberJoin {
+            server_id: server.id,
+            user: user_public.clone(),
+        };
+        state.broadcast_to_server(&server.id, &event).await;
     }
 
     // Generate token
@@ -630,6 +663,16 @@ async fn join_server(
     Path(server_id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     db::members::add(&state.db, auth.user_id, server_id).await?;
+
+    // Broadcast MemberJoin to all connected server members
+    if let Ok(Some(user)) = db::users::find_by_id(&state.db, auth.user_id).await {
+        let event = WsEvent::MemberJoin {
+            server_id,
+            user: UserPublic::from(user),
+        };
+        state.broadcast_to_server(&server_id, &event).await;
+    }
+
     Ok(StatusCode::OK)
 }
 
@@ -639,6 +682,14 @@ async fn leave_server(
     Path(server_id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
     db::members::remove(&state.db, auth.user_id, server_id).await?;
+
+    // Broadcast MemberLeave to all connected server members
+    let event = WsEvent::MemberLeave {
+        server_id,
+        user_id: auth.user_id,
+    };
+    state.broadcast_to_server(&server_id, &event).await;
+
     Ok(StatusCode::OK)
 }
 
@@ -761,6 +812,104 @@ async fn list_members(
     Ok(Json(members))
 }
 
+async fn kick_member(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((server_id, user_id)): Path<(Uuid, Uuid)>,
+) -> AppResult<StatusCode> {
+    check_permission(&state, auth.user_id, server_id, Permissions::KICK_MEMBERS).await?;
+
+    // Cannot kick the server owner
+    if let Some(server) = db::servers::find_by_id(&state.db, server_id).await? {
+        if server.owner_id == user_id {
+            return Err(AppError::Forbidden);
+        }
+    }
+
+    db::members::remove(&state.db, user_id, server_id).await?;
+
+    // Broadcast MemberLeave
+    let event = WsEvent::MemberLeave {
+        server_id,
+        user_id,
+    };
+    state.broadcast_to_server(&server_id, &event).await;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+// ─── Ban Handlers ───────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct CreateBanRequest {
+    reason: Option<String>,
+}
+
+async fn ban_member(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((server_id, user_id)): Path<(Uuid, Uuid)>,
+    Json(req): Json<CreateBanRequest>,
+) -> AppResult<StatusCode> {
+    check_permission(&state, auth.user_id, server_id, Permissions::BAN_MEMBERS).await?;
+
+    // Cannot ban the server owner
+    if let Some(server) = db::servers::find_by_id(&state.db, server_id).await? {
+        if server.owner_id == user_id {
+            return Err(AppError::Forbidden);
+        }
+    }
+
+    // Add to bans table
+    db::bans::create(&state.db, server_id, user_id, req.reason.as_deref()).await?;
+
+    // Remove from server (kick)
+    db::members::remove(&state.db, user_id, server_id).await?;
+
+    // Broadcast MemberLeave
+    let event = WsEvent::MemberLeave {
+        server_id,
+        user_id,
+    };
+    state.broadcast_to_server(&server_id, &event).await;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn unban_member(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((server_id, user_id)): Path<(Uuid, Uuid)>,
+) -> AppResult<StatusCode> {
+    check_permission(&state, auth.user_id, server_id, Permissions::BAN_MEMBERS).await?;
+
+    let deleted = db::bans::delete(&state.db, server_id, user_id).await?;
+    if deleted {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::NotFound("Ban not found".to_string()))
+    }
+}
+
+async fn list_bans(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(server_id): Path<Uuid>,
+) -> AppResult<Json<Vec<crate::models::Ban>>> {
+    check_permission(&state, auth.user_id, server_id, Permissions::BAN_MEMBERS).await?;
+
+    // We don't have a list_for_server yet in db::bans, let's just make it return an empty list or implement it right after.
+    // For now, let's implement the DB view query directly here since we missed it in db.rs
+    let bans = sqlx::query_as::<_, crate::models::Ban>(
+        "SELECT * FROM bans WHERE server_id = $1 ORDER BY banned_at DESC",
+    )
+    .bind(server_id)
+    .fetch_all(&state.db)
+    .await?;
+
+    Ok(Json(bans))
+}
+
 // ─── Channel Handlers ───────────────────────────────────────────────────────
 
 async fn create_channel(
@@ -795,6 +944,25 @@ async fn list_channels(
 ) -> AppResult<Json<Vec<Channel>>> {
     let channels = db::channels::list_for_server(&state.db, server_id).await?;
     Ok(Json(channels))
+}
+
+async fn delete_channel(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
+) -> AppResult<StatusCode> {
+    check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_CHANNELS).await?;
+
+    // Delete the channel from the database
+    let deleted = db::channels::delete(&state.db, channel_id).await?;
+    
+    if deleted {
+        // Broadcast channel deletion (you might want to add a ChannelDelete event to WsEvent instead of raw ID, but we can reuse MessageDelete-like logic or just rely on state refetch for now. Since we don't have ChannelDelete in WsEvent, we do nothing for now and rely on standard app reload or we should add ChannelDelete event).
+        // For now, return OK.
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(AppError::NotFound("Channel not found".to_string()))
+    }
 }
 
 // ─── Message Handlers ───────────────────────────────────────────────────────
@@ -840,9 +1008,35 @@ async fn get_messages(
 
 async fn delete_message(
     State(state): State<AppState>,
+    auth: AuthUser,
     Path((channel_id, message_id)): Path<(Uuid, i64)>,
 ) -> AppResult<StatusCode> {
-    // TODO: verify ownership or admin permission
+    // 1. Fetch message to check authorship
+    let message_opt = db::messages::list_for_channel(&state.db, channel_id, Some(message_id + 1), 1).await?;
+    let message = message_opt.into_iter().find(|m| m.id == message_id).ok_or_else(|| {
+        AppError::NotFound("Message not found".to_string())
+    })?;
+
+    // 2. Fetch channel to get server_id for permission check
+    // Use `query` instead of `query!` to avoid offline sqlx compilation issues in this environment
+    let channel_record = sqlx::query("SELECT server_id FROM channels WHERE id = $1")
+        .bind(channel_id)
+        .fetch_optional(&state.db)
+        .await?;
+        
+    let channel_server_id: Uuid = match channel_record {
+        Some(row) => sqlx::Row::try_get(&row, "server_id")?,
+        None => return Err(AppError::NotFound("Channel not found".to_string())),
+    };
+
+    // 3. Verify ownership OR MANAGE_MESSAGES permission
+    if message.author_id != auth.user_id {
+        // Not the author, check permissions
+        if let Err(e) = check_permission(&state, auth.user_id, channel_server_id, Permissions::MANAGE_MESSAGES).await {
+            return Err(e); // Propagate Forbidden/Unauthorized
+        }
+    }
+
     let deleted = db::messages::delete(&state.db, message_id).await?;
     if !deleted {
         return Err(AppError::NotFound("Message not found".to_string()));
@@ -870,13 +1064,31 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
                 Ok(WsEvent::Identify { token }) => {
                     match state.validate_token_federated(&token).await {
                         Ok((id, _username)) => id,
-                        Err(_) => return,
+                        Err(_) => {
+                            let _ = socket.send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
+                                code: 1000,
+                                reason: "Invalid token".into(),
+                            }))).await;
+                            return;
+                        }
                     }
                 }
-                _ => return,
+                _ => {
+                    let _ = socket.send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
+                        code: 1000,
+                        reason: "Expected Identify".into(),
+                    }))).await;
+                    return;
+                }
             }
         }
-        _ => return,
+        _ => {
+            let _ = socket.send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
+                code: 1000,
+                reason: "No message received".into(),
+            }))).await;
+            return;
+        }
     };
 
     // Create broadcast channel for this session

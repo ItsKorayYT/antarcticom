@@ -171,6 +171,11 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                                     ? (auth.user?.displayName ?? 'You')
                                     : (msg.author?.displayName ??
                                         msg.authorId.substring(0, 8)),
+                                onDelete: () async {
+                                  await ref
+                                      .read(messagesProvider.notifier)
+                                      .deleteMessage(widget.channelId, msg.id);
+                                },
                               );
                             },
                           ),
@@ -276,12 +281,39 @@ class _MessageBubble extends StatelessWidget {
   final MessageInfo message;
   final bool isOwn;
   final String authorName;
+  final VoidCallback onDelete;
 
   const _MessageBubble({
     required this.message,
     required this.isOwn,
     required this.authorName,
+    required this.onDelete,
   });
+
+  void _showOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AntarcticomTheme.bgSecondary,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.redAccent),
+                title: const Text('Delete Message',
+                    style: TextStyle(color: Colors.redAccent)),
+                onTap: () {
+                  Navigator.pop(context);
+                  onDelete();
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -290,84 +322,87 @@ class _MessageBubble extends StatelessWidget {
         horizontal: AntarcticomTheme.spacingMd,
         vertical: 2,
       ),
-      child: MouseRegion(
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AntarcticomTheme.spacingMd,
-            vertical: AntarcticomTheme.spacingSm,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusSm),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Avatar
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  gradient: isOwn
-                      ? AntarcticomTheme.accentGradient
-                      : const LinearGradient(
-                          colors: [Color(0xFF7C4DFF), Color(0xFF448AFF)],
-                        ),
-                  borderRadius:
-                      BorderRadius.circular(AntarcticomTheme.radiusFull),
-                ),
-                child: Center(
-                  child: Text(
-                    authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
+      child: GestureDetector(
+        onLongPress: () => _showOptions(context),
+        child: MouseRegion(
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AntarcticomTheme.spacingMd,
+              vertical: AntarcticomTheme.spacingSm,
+            ),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AntarcticomTheme.radiusSm),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Avatar
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    gradient: isOwn
+                        ? AntarcticomTheme.accentGradient
+                        : const LinearGradient(
+                            colors: [Color(0xFF7C4DFF), Color(0xFF448AFF)],
+                          ),
+                    borderRadius:
+                        BorderRadius.circular(AntarcticomTheme.radiusFull),
+                  ),
+                  child: Center(
+                    child: Text(
+                      authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: AntarcticomTheme.spacingSm),
+                const SizedBox(width: AntarcticomTheme.spacingSm),
 
-              // Content
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          authorName,
-                          style: TextStyle(
-                            color: isOwn
-                                ? AntarcticomTheme.accentSecondary
-                                : const Color(0xFF7C8CFF),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 14,
+                // Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            authorName,
+                            style: TextStyle(
+                              color: isOwn
+                                  ? AntarcticomTheme.accentSecondary
+                                  : const Color(0xFF7C8CFF),
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: AntarcticomTheme.spacingSm),
-                        Text(
-                          message.formattedTime,
-                          style: const TextStyle(
-                            color: AntarcticomTheme.textMuted,
-                            fontSize: 11,
+                          const SizedBox(width: AntarcticomTheme.spacingSm),
+                          Text(
+                            message.formattedTime,
+                            style: const TextStyle(
+                              color: AntarcticomTheme.textMuted,
+                              fontSize: 11,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      message.content,
-                      style: const TextStyle(
-                        color: AntarcticomTheme.textPrimary,
-                        fontSize: 14,
-                        height: 1.4,
+                        ],
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        message.content,
+                        style: const TextStyle(
+                          color: AntarcticomTheme.textPrimary,
+                          fontSize: 14,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

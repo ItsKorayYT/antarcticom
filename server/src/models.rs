@@ -108,6 +108,7 @@ pub struct Message {
     pub channel_id: Uuid,
     pub author_id: Uuid,
     pub content: String,
+    #[allow(dead_code)]
     pub nonce: Option<Vec<u8>>,
     pub created_at: DateTime<Utc>,
     pub edited_at: Option<DateTime<Utc>>,
@@ -119,10 +120,12 @@ pub struct Message {
 #[derive(Debug, Deserialize)]
 pub struct SendMessageRequest {
     pub content: String,
+    #[allow(dead_code)]
     pub nonce: Option<String>,
     pub reply_to_id: Option<i64>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 pub struct EditMessageRequest {
     pub content: String,
@@ -170,11 +173,13 @@ impl Permissions {
     pub const BAN_MEMBERS:     i64 = 1 << 3; // 8
     pub const SEND_MESSAGES:   i64 = 1 << 4; // 16
     pub const ADMINISTRATOR:   i64 = 1 << 5; // 32
+    pub const MANAGE_MESSAGES: i64 = 1 << 6; // 64
 
     pub fn new(bits: i64) -> Self {
         Self(bits)
     }
 
+    #[allow(dead_code)]
     pub fn bits(&self) -> i64 {
         self.0
     }
@@ -183,10 +188,12 @@ impl Permissions {
         (self.0 & Self::ADMINISTRATOR) != 0 || (self.0 & permission) != 0
     }
 
+    #[allow(dead_code)]
     pub fn add(&mut self, permission: i64) {
         self.0 |= permission;
     }
 
+    #[allow(dead_code)]
     pub fn remove(&mut self, permission: i64) {
         self.0 &= !permission;
     }
@@ -205,8 +212,21 @@ pub struct VoiceSession {
     pub deafened: bool,
 }
 
+// ─── Bans ───────────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Ban {
+    pub server_id: Uuid,
+    pub user_id: Uuid,
+    pub reason: Option<String>,
+    pub banned_at: DateTime<Utc>,
+    #[sqlx(skip)]
+    pub user: Option<UserPublic>,
+}
+
 // ─── Reactions ──────────────────────────────────────────────────────────────
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Reaction {
     pub message_id: i64,
