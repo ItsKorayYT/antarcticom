@@ -88,6 +88,43 @@ final permissionsProvider =
   );
 });
 
+/// Calculates the permissions for a specific (target) member in a server.
+final memberPermissionsProvider =
+    Provider.family<Permissions, Member>((ref, member) {
+  final rolesState = ref.watch(rolesProvider(member.serverId));
+  final serversState = ref.watch(serversProvider);
+
+  // 1. Check if owner
+  final server = serversState.servers.firstWhere(
+    (s) => s.id == member.serverId,
+    orElse: () => const ServerInfo(
+        id: '', name: '', ownerId: '', iconHash: null), // dummy
+  );
+
+  if (server.id.isNotEmpty && server.ownerId == member.userId) {
+    return const Permissions(Permissions.administrator);
+  }
+
+  // 2. Aggregate role permissions
+  int raw = 0;
+
+  // Add @everyone role permissions
+  final everyoneRole =
+      rolesState.roles.where((r) => r.name == '@everyone').firstOrNull;
+  if (everyoneRole != null) {
+    raw |= everyoneRole.permissions;
+  }
+
+  for (final roleId in member.roles) {
+    final role = rolesState.roles.where((r) => r.id == roleId).firstOrNull;
+    if (role != null) {
+      raw |= role.permissions;
+    }
+  }
+
+  return Permissions(raw);
+});
+
 // ─── Server Members Notifier ─────────────────────────────────────────────
 
 class ServerMembersNotifier extends StateNotifier<AsyncValue<List<Member>>> {

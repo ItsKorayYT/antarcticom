@@ -147,10 +147,14 @@ class _MemberItem extends ConsumerWidget {
     final joinedDate = '${months[d.month - 1]} ${d.day}, ${d.year}';
 
     // Check permissions for the current user
-    final perms = ref.watch(permissionsProvider(member.serverId));
-    final canKick = perms.has(Permissions.kickMembers);
-    final canBan = perms.has(Permissions.banMembers);
-    final canManageRoles = perms.has(Permissions.administrator);
+    final currentUserPerms = ref.watch(permissionsProvider(member.serverId));
+    final canKick = currentUserPerms.has(Permissions.kickMembers);
+    final canBan = currentUserPerms.has(Permissions.banMembers);
+    final canManageRoles = currentUserPerms.has(Permissions.administrator);
+
+    // Check permissions for the target user (to see if they are already an admin)
+    final targetUserPerms = ref.watch(memberPermissionsProvider(member));
+    final targetIsAdmin = targetUserPerms.has(Permissions.administrator);
 
     // Ensure we don't show these actions on ourselves
     final auth = ref.watch(authProvider);
@@ -243,13 +247,28 @@ class _MemberItem extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Display name
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            color: AntarcticomTheme.textPrimary,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        Row(
+                          children: [
+                            Text(
+                              name,
+                              style: const TextStyle(
+                                color: AntarcticomTheme.textPrimary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (targetIsAdmin) ...[
+                              const SizedBox(width: 8),
+                              const Tooltip(
+                                message: 'Server Admin',
+                                child: Icon(
+                                  Icons.shield,
+                                  color: AntarcticomTheme.accentSecondary,
+                                  size: 20,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                         if (username.isNotEmpty)
                           Text(
@@ -368,11 +387,19 @@ class _MemberItem extends ConsumerWidget {
                                       }
                                     }
                                   },
-                                  icon: const Icon(Icons.admin_panel_settings,
-                                      size: 18, color: Colors.blueAccent),
-                                  label: const Text('Make Admin',
-                                      style:
-                                          TextStyle(color: Colors.blueAccent)),
+                                  icon: Icon(Icons.admin_panel_settings,
+                                      size: 18,
+                                      color: targetIsAdmin
+                                          ? Colors.grey
+                                          : Colors.blueAccent),
+                                  label: Text(
+                                      targetIsAdmin
+                                          ? 'Already Admin'
+                                          : 'Make Admin',
+                                      style: TextStyle(
+                                          color: targetIsAdmin
+                                              ? Colors.grey
+                                              : Colors.blueAccent)),
                                 ),
                               if (canKick)
                                 TextButton.icon(
