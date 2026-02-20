@@ -82,27 +82,45 @@ class ServersNotifier extends StateNotifier<ServersState> {
     state = const ServersState(isLoading: true);
     try {
       final allServers = <ServerInfo>[];
+      final seenServerIds = <String>{};
 
       // 1. Fetch from primary (auth hub / standalone)
       try {
         final data = await _api.listServers();
-        allServers.addAll(
-          data.map((e) => ServerInfo.fromJson(e as Map<String, dynamic>)),
-        );
+        for (final e in data) {
+          final server = ServerInfo.fromJson(e as Map<String, dynamic>);
+          if (seenServerIds.add(server.id)) {
+            allServers.add(server);
+          }
+        }
       } catch (e) {
         debugPrint('Primary server list failed: $e');
       }
 
       // 2. Fetch from each connected community host
       for (final host in _connMgr.hosts) {
+        // Skip fetching from community host if it's the EXACT same URL as the primary API
+        // This avoids duplicating servers in Standalone mode where the host is added manually.
+        final uriA = Uri.tryParse(_api.baseUrl);
+        final uriB = Uri.tryParse(host.url);
+        if (uriA != null &&
+            uriB != null &&
+            uriA.host == uriB.host &&
+            uriA.port == uriB.port) {
+          continue;
+        }
+
         final communityApi = _connMgr.getApiForHost(host.url);
         if (communityApi == null) continue;
         try {
           final data = await communityApi.listServers();
-          allServers.addAll(
-            data.map((e) => ServerInfo.fromJson(e as Map<String, dynamic>,
-                hostUrl: host.url)),
-          );
+          for (final e in data) {
+            final server = ServerInfo.fromJson(e as Map<String, dynamic>,
+                hostUrl: host.url);
+            if (seenServerIds.add(server.id)) {
+              allServers.add(server);
+            }
+          }
         } catch (e) {
           debugPrint('Community host ${host.url} list failed: $e');
         }

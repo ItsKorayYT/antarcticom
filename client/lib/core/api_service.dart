@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'auth_provider.dart';
+
 /// Default auth hub URL — used for login/register when no override is provided.
 const String kDefaultAuthHubUrl = 'http://antarctis.xyz:8443';
 
@@ -12,15 +14,27 @@ class ApiService {
   final String _baseUrl;
 
   final Dio _dio;
+  final void Function()? onUnauthorized;
 
-  ApiService({String? baseUrl})
+  ApiService({String? baseUrl, this.onUnauthorized})
       : _baseUrl = _stripTrailingSlash(baseUrl ?? kDefaultAuthHubUrl),
         _dio = Dio(BaseOptions(
           baseUrl: _stripTrailingSlash(baseUrl ?? kDefaultAuthHubUrl),
           connectTimeout: const Duration(seconds: 10),
           receiveTimeout: const Duration(seconds: 10),
           headers: {'Content-Type': 'application/json'},
-        ));
+        )) {
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (error, handler) {
+          if (error.response?.statusCode == 401) {
+            onUnauthorized?.call();
+          }
+          return handler.next(error);
+        },
+      ),
+    );
+  }
 
   static String _stripTrailingSlash(String url) {
     while (url.endsWith('/')) {
@@ -95,6 +109,10 @@ class ApiService {
 
   Future<void> joinServer(String serverId) async {
     await _dio.post('/api/servers/$serverId/join');
+  }
+
+  Future<void> leaveServer(String serverId) async {
+    await _dio.post('/api/servers/$serverId/leave');
   }
 
   // ─── Roles ──────────────────────────────────────────────────────────
@@ -258,4 +276,13 @@ class ApiService {
 // ─── Provider ─────────────────────────────────────────────────────────
 
 /// The primary (auth hub) API service provider.
-final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
+final Provider<ApiService> apiServiceProvider = Provider<ApiService>((ref) {
+  return ApiService(
+    onUnauthorized: () {
+      // Defer the logout to avoid state modification during build phase
+      Future.microtask(() {
+        ref.read(authProvider.notifier).logout();
+      });
+    },
+  );
+});

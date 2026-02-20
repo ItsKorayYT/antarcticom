@@ -146,13 +146,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       builder: (context, ref, _) {
                         final perms =
                             ref.watch(permissionsProvider(selectedServerId));
-                        if (!perms.has(Permissions.manageServer)) {
-                          return const SizedBox();
-                        }
+                        final canManageServer =
+                            perms.has(Permissions.manageServer);
+
                         return PopupMenuButton<String>(
                           icon: const Icon(Icons.expand_more,
                               color: AntarcticomTheme.textPrimary),
-                          onSelected: (value) {
+                          onSelected: (value) async {
                             if (value == 'roles') {
                               Navigator.of(context).push(
                                 MaterialPageRoute(
@@ -160,12 +160,69 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                       RolesScreen(serverId: selectedServerId),
                                 ),
                               );
+                            } else if (value == 'leave') {
+                              try {
+                                // Close the popup
+                                final api = ref.read(apiServiceProvider);
+                                // The api service might not be the right one if it's a community server
+                                // Let's use the current connection manager
+                                final host = ref
+                                    .read(serversProvider)
+                                    .servers
+                                    .where((s) => s.id == selectedServerId)
+                                    .firstOrNull
+                                    ?.hostUrl;
+                                final effectiveApi = host != null
+                                    ? ref
+                                            .read(connectionManagerProvider)
+                                            .getApiForHost(host) ??
+                                        api
+                                    : api;
+
+                                // Actually, leave server endpoint is not exposed in ApiService yet!
+                                // Wait, let's just make a raw DIO call or add it to ApiService.
+                                // I will add it to ApiService next.
+                                await effectiveApi
+                                    .leaveServer(selectedServerId);
+
+                                // Deselect the server
+                                ref
+                                    .read(selectedServerIdProvider.notifier)
+                                    .state = null;
+                                ref.read(channelsProvider.notifier).clear();
+                                ref
+                                    .read(selectedChannelIdProvider.notifier)
+                                    .state = null;
+
+                                // Refresh servers list
+                                ref
+                                    .read(serversProvider.notifier)
+                                    .fetchServers();
+
+                                if (context.mounted) {
+                                  context.go('/channels/@me');
+                                }
+                              } catch (e) {
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                        content:
+                                            Text('Failed to leave server: $e')),
+                                  );
+                                }
+                              }
                             }
                           },
                           itemBuilder: (context) => [
+                            if (canManageServer)
+                              const PopupMenuItem(
+                                value: 'roles',
+                                child: Text('Server Roles'),
+                              ),
                             const PopupMenuItem(
-                              value: 'roles',
-                              child: Text('Server Roles'),
+                              value: 'leave',
+                              child: Text('Leave Server',
+                                  style: TextStyle(color: Colors.redAccent)),
                             ),
                           ],
                         );

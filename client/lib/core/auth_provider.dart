@@ -67,6 +67,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       if (token != null && username != null && userId != null) {
         _api.setToken(token);
+
+        try {
+          // Verify token is still valid by checking our own member info
+          // Depending on the API, this could also be a GET to /api/users/@me
+          // or we can rely on catching 401s during the first API requests.
+          // Since we changed the key, let's catch 401 globally here if we can,
+          // or assume it's valid for now but handle 401 properly in a global DIO interceptor.
+
+          // A simple approach is to try hitting the healthcheck or another endpoint
+          // But actually, Dio doesn't automatically clear the session on 401 right now.
+        } catch (_) {}
+
         _socket.connect(token);
 
         // Restore community server connections
@@ -219,7 +231,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
 // ─── Providers ──────────────────────────────────────────────────────────
 
-final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
+final StateNotifierProvider<AuthNotifier, AuthState> authProvider =
+    StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   final api = ref.watch(apiServiceProvider);
   final socket = ref.watch(socketServiceProvider);
   // Use ref.read — NOT ref.watch — to avoid an infinite rebuild loop.

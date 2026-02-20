@@ -44,6 +44,12 @@ class SocketService {
 
   /// Connect to the WebSocket gateway.
   void connect(String token) {
+    if (_token == token && _channel != null) {
+      // Already connected or connecting with the same token. Skip.
+      _shouldReconnect = true;
+      return;
+    }
+
     _shouldReconnect = true;
     _token = token;
     _reconnectAttempts = 0;
