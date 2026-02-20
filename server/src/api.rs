@@ -609,7 +609,7 @@ async fn instance_info(
     };
     
     let mut default_server_id = None;
-    if !state.config.is_auth_hub() {
+    if state.config.is_community() {
         if let Ok(servers) = db::servers::list_all(&state.db).await {
             if let Some(first) = servers.first() {
                 default_server_id = Some(first.id);
@@ -1102,6 +1102,8 @@ async fn ws_upgrade(
     ws.on_upgrade(move |socket| handle_ws(socket, state))
 }
 
+use futures::{SinkExt, StreamExt};
+
 async fn handle_ws(mut socket: WebSocket, state: AppState) {
     // Wait for Identify message with token
     let user_id = match socket.recv().await {
@@ -1195,11 +1197,12 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
         state.broadcast_to_channel(channel_id, &presence_update);
     }
 
+    let (mut sender, mut receiver) = socket.split();
+
     // Spawn task to forward broadcast messages to WebSocket
-    let mut send_socket = socket;
-    let forward_handle = tokio::spawn(async move {
+    let mut forward_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
-            if send_socket
+            if sender
                 .send(WsMessage::Text(msg.into()))
                 .await
                 .is_err()
@@ -1209,8 +1212,20 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
         }
     });
 
-    // Cleanup on disconnect
-    forward_handle.await.ok();
+    let mut receive_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if let WsMessage::Close(_) = msg {
+                break;
+            }
+        }
+    });
+
+    // Wait for either the read or write side to close
+    tokio::select! {
+        _ = &mut forward_task => receive_task.abort(),
+        _ = &mut receive_task => forward_task.abort(),
+    }
+
     state.ws_sessions.remove(&user_id);
 
     // Unsubscribe from channels
