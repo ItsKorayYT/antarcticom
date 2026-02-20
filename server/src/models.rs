@@ -67,6 +67,25 @@ pub struct Server {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServerPublic {
+    pub id: Uuid,
+    pub name: String,
+    pub icon_hash: Option<String>,
+    pub owner_id: Uuid,
+}
+
+impl From<Server> for ServerPublic {
+    fn from(server: Server) -> Self {
+        Self {
+            id: server.id,
+            name: server.name,
+            icon_hash: server.icon_hash,
+            owner_id: server.owner_id,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 pub struct CreateServerRequest {
     pub name: String,
@@ -301,6 +320,7 @@ pub enum WsEvent {
 
     // Server
     ServerCreate(Server),
+    ServerUpdate { server: ServerPublic },
     ChannelCreate(Channel),
     MemberJoin { server_id: Uuid, user: UserPublic },
     MemberLeave { server_id: Uuid, user_id: Uuid },

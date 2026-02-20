@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_service.dart';
 import 'connection_manager.dart';
+import 'socket_service.dart';
 
 // ─── Server Model ───────────────────────────────────────────────────────
 
@@ -74,8 +75,36 @@ class ServersState {
 class ServersNotifier extends StateNotifier<ServersState> {
   final ApiService _api;
   final ConnectionManager _connMgr;
+  final SocketService _socket;
 
-  ServersNotifier(this._api, this._connMgr) : super(const ServersState());
+  ServersNotifier(this._api, this._connMgr, this._socket)
+      : super(const ServersState()) {
+    _socket.events.listen(_handleEvent);
+  }
+
+  void _handleEvent(WsEvent event) {
+    if (event.type == 'ServerUpdate') {
+      final serverData = event.data?['server'] as Map<String, dynamic>?;
+      if (serverData != null) {
+        final serverInfo = ServerInfo.fromJson(serverData);
+        final index = state.servers.indexWhere((s) => s.id == serverInfo.id);
+
+        if (index != -1) {
+          final newServers = List<ServerInfo>.from(state.servers);
+          // Replace the updated server info, preserving the original hostUrl if needed
+          final original = newServers[index];
+          newServers[index] = ServerInfo(
+            id: serverInfo.id,
+            name: serverInfo.name,
+            iconHash: serverInfo.iconHash,
+            ownerId: serverInfo.ownerId,
+            hostUrl: original.hostUrl,
+          );
+          state = state.copyWith(servers: newServers);
+        }
+      }
+    }
+  }
 
   /// Fetch servers from the auth hub / standalone AND all community hosts.
   Future<void> fetchServers() async {
@@ -153,7 +182,8 @@ final serversProvider =
     StateNotifierProvider<ServersNotifier, ServersState>((ref) {
   final api = ref.watch(apiServiceProvider);
   final connMgr = ref.watch(connectionManagerProvider);
-  return ServersNotifier(api, connMgr);
+  final socket = ref.watch(socketServiceProvider);
+  return ServersNotifier(api, connMgr, socket);
 });
 
 /// Currently selected server ID.

@@ -680,6 +680,14 @@ async fn join_server(
             // First user to join the default server claims it
             tracing::info!("User {} is claiming the default server {}", auth.user_id, server_id);
             db::servers::transfer_ownership(&state.db, server_id, auth.user_id).await?;
+
+            // Broadcast the server update so the client gets owner permissions immediately
+            if let Ok(Some(updated_server)) = db::servers::find_by_id(&state.db, server_id).await {
+                let event = WsEvent::ServerUpdate {
+                    server: ServerPublic::from(updated_server),
+                };
+                state.broadcast_to_server(&server_id, &event).await;
+            }
         }
     }
 
