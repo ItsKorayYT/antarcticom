@@ -750,7 +750,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 autofocus: true,
                 style: const TextStyle(color: AntarcticomTheme.textPrimary),
                 decoration: InputDecoration(
-                  hintText: 'e.g. myserver.com:8443',
+                  hintText: 'e.g. myserver.com',
                   hintStyle:
                       const TextStyle(color: AntarcticomTheme.textSecondary),
                   errorText: errorText,

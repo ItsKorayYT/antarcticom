@@ -102,10 +102,13 @@ class ConnectionManager extends ChangeNotifier {
       normalised = normalised.substring(0, normalised.length - 1);
     }
 
-    // Check if already added
-    if (_hosts.any((h) => h.url == normalised)) {
-      throw Exception('Server already added');
+    // Default to port 8443 if none is specified
+    final afterScheme = normalised.indexOf('//') + 2;
+    if (!normalised.substring(afterScheme).contains(':')) {
+      normalised = '$normalised:8443';
     }
+
+    final isAlreadyKnown = _hosts.any((h) => h.url == normalised);
 
     // Probe instance info
     final probeApi = ApiService(baseUrl: normalised);
@@ -119,21 +122,34 @@ class ConnectionManager extends ChangeNotifier {
     final name = info['name'] as String? ?? normalised;
     final host = CommunityHost(url: normalised, name: name);
 
-    _hosts.add(host);
-    _createConnection(normalised);
-    await _persistHosts();
+    if (!isAlreadyKnown) {
+      _hosts.add(host);
+      _createConnection(normalised);
+      await _persistHosts();
+    }
 
     // Auto-join the default server if we have a token
+    bool joinedDefault = false;
     final defaultServerId = info['default_server_id'] as String?;
+    debugPrint(
+        'addServer: defaultServerId=$defaultServerId _token=${_token != null}');
     if (defaultServerId != null && _token != null) {
       try {
         final api = _communityApis[normalised];
+        debugPrint('addServer: api is null? ${api == null}');
         if (api != null) {
           await api.joinServer(defaultServerId);
+          debugPrint('addServer: joined successfully!');
+          joinedDefault = true;
         }
       } catch (e) {
-        debugPrint('Failed to auto-join default server: $e');
+        debugPrint(
+            'addServer Failed to auto-join default server caught error: $e');
       }
+    }
+
+    if (isAlreadyKnown && !joinedDefault) {
+      throw Exception('Server already added');
     }
 
     notifyListeners();
