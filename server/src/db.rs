@@ -350,6 +350,7 @@ pub mod messages {
                     created_at: row.get("created_at"),
                     edited_at: row.get("edited_at"),
                     reply_to_id: row.get("reply_to_id"),
+                    is_deleted: row.try_get("is_deleted").unwrap_or(false),
                     author: Some(UserPublic {
                         id: row.get("author_id"),
                         username: row.get("username"),
@@ -385,7 +386,7 @@ pub mod messages {
     }
 
     pub async fn delete(pool: &PgPool, id: i64) -> AppResult<bool> {
-        let result = sqlx::query("DELETE FROM messages WHERE id = $1")
+        let result = sqlx::query("UPDATE messages SET is_deleted = TRUE, content = '' WHERE id = $1")
             .bind(id)
             .execute(pool)
             .await?;

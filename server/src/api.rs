@@ -727,6 +727,16 @@ async fn leave_server(
     auth: AuthUser,
     Path(server_id): Path<Uuid>,
 ) -> AppResult<StatusCode> {
+    if let Some(server) = db::servers::find_by_id(&state.db, server_id).await? {
+        if server.owner_id == auth.user_id {
+            return Err(AppError::BadRequest(
+                "Server owners cannot leave their own server".into(),
+            ));
+        }
+    } else {
+        return Err(AppError::NotFound("Server not found".into()));
+    }
+
     db::members::remove(&state.db, auth.user_id, server_id).await?;
 
     // Broadcast MemberLeave to all connected server members
@@ -1088,7 +1098,7 @@ async fn delete_message(
         return Err(AppError::NotFound("Message not found".to_string()));
     }
 
-    state.broadcast_to_channel(&channel_id, &WsEvent::MessageDelete { channel_id, message_id });
+    state.broadcast_to_channel(&channel_id, &WsEvent::MessageDelete { channel_id, message_id, is_deleted: true });
 
     Ok(StatusCode::NO_CONTENT)
 }

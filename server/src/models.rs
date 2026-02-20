@@ -133,6 +133,7 @@ pub struct Message {
     pub created_at: DateTime<Utc>,
     pub edited_at: Option<DateTime<Utc>>,
     pub reply_to_id: Option<i64>,
+    pub is_deleted: bool,
     #[sqlx(skip)]
     pub author: Option<UserPublic>,
 }
@@ -305,7 +306,7 @@ pub enum WsEvent {
     // Messages
     MessageCreate(Message),
     MessageUpdate(Message),
-    MessageDelete { channel_id: Uuid, message_id: i64 },
+    MessageDelete { channel_id: Uuid, message_id: i64, is_deleted: bool },
 
     // Reactions
     ReactionAdd { channel_id: Uuid, message_id: i64, user_id: Uuid, emoji: String },
