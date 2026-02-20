@@ -33,6 +33,9 @@ class ConnectionManager extends ChangeNotifier {
   /// API client for the auth hub (login / register).
   final ApiService authApi;
 
+  /// WebSocket client for the auth hub.
+  final SocketService? authSocket;
+
   /// Per-community-server API clients, keyed by normalised host URL.
   final Map<String, ApiService> _communityApis = {};
 
@@ -46,7 +49,8 @@ class ConnectionManager extends ChangeNotifier {
 
   String? _token;
 
-  ConnectionManager({ApiService? authApi}) : authApi = authApi ?? ApiService();
+  ConnectionManager({ApiService? authApi, this.authSocket})
+      : authApi = authApi ?? ApiService();
 
   // ─── Lifecycle ──────────────────────────────────────────────────────
 
@@ -82,8 +86,10 @@ class ConnectionManager extends ChangeNotifier {
   void setToken(String? token) {
     _token = token;
     authApi.setToken(token);
-    for (final api in _communityApis.values) {
-      api.setToken(token);
+    for (final entry in _communityApis.entries) {
+      if (entry.key != authApi.baseUrl) {
+        entry.value.setToken(token);
+      }
     }
   }
 
@@ -160,8 +166,10 @@ class ConnectionManager extends ChangeNotifier {
   Future<void> removeServer(String url) async {
     _hosts.removeWhere((h) => h.url == url);
     _communityApis.remove(url);
-    _communitySockets[url]?.disconnect();
-    _communitySockets.remove(url);
+    final socket = _communitySockets.remove(url);
+    if (url != authApi.baseUrl) {
+      socket?.disconnect();
+    }
     await _persistHosts();
     notifyListeners();
   }
@@ -169,6 +177,17 @@ class ConnectionManager extends ChangeNotifier {
   // ─── Connection Helpers ──────────────────────────────────────────────
 
   void _createConnection(String url) {
+    if (url == authApi.baseUrl && authSocket != null) {
+      // Re-use the auth hub's connections since this community server is the primary node.
+      _communityApis[url] = authApi;
+      _communitySockets[url] = authSocket!;
+      // Auto-connect WebSocket if we have a token
+      if (_token != null) {
+        authSocket!.connect(_token!);
+      }
+      return;
+    }
+
     final api = ApiService.forServer(url, token: _token);
     _communityApis[url] = api;
 
@@ -194,15 +213,19 @@ class ConnectionManager extends ChangeNotifier {
   void connectAll(String token) {
     _token = token;
     for (final entry in _communitySockets.entries) {
-      entry.value.connect(token);
+      if (entry.key != authApi.baseUrl) {
+        entry.value.connect(token);
+      }
     }
   }
 
   /// Disconnect all community WebSockets (e.g., on logout).
   void disconnectAll() {
     _token = null;
-    for (final socket in _communitySockets.values) {
-      socket.disconnect();
+    for (final entry in _communitySockets.entries) {
+      if (entry.key != authApi.baseUrl) {
+        entry.value.disconnect();
+      }
     }
   }
 }
@@ -212,5 +235,6 @@ class ConnectionManager extends ChangeNotifier {
 final connectionManagerProvider =
     ChangeNotifierProvider<ConnectionManager>((ref) {
   final authApi = ref.watch(apiServiceProvider);
-  return ConnectionManager(authApi: authApi);
+  final authSocket = ref.watch(socketServiceProvider);
+  return ConnectionManager(authApi: authApi, authSocket: authSocket);
 });
