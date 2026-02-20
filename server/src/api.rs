@@ -478,7 +478,23 @@ async fn register(
     // Auto-join user to all existing servers (i.e. the default server)
     let all_servers = db::servers::list_all(&state.db).await?;
     let user_public = UserPublic::from(user.clone());
+    let system_owner_id = Uuid::parse_str("00000000-0000-7000-8000-000000000000").unwrap();
+    
     for server in &all_servers {
+        // Claim the server if it's currently owned by the system user
+        if server.owner_id == system_owner_id {
+            tracing::info!("User {} is claiming the default server {} on registration", user.id, server.id);
+            let _ = db::servers::transfer_ownership(&state.db, server.id, user.id).await;
+            
+            // Broadcast the server update so any connected clients get it (unlikely on register, but good for completeness)
+            if let Ok(Some(updated_server)) = db::servers::find_by_id(&state.db, server.id).await {
+                let event = WsEvent::ServerUpdate {
+                    server: ServerPublic::from(updated_server),
+                };
+                state.broadcast_to_server(&server.id, &event).await;
+            }
+        }
+
         let _ = db::members::add(&state.db, user.id, server.id).await;
         // Broadcast MemberJoin so connected clients update their member lists
         let event = WsEvent::MemberJoin {
