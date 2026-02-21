@@ -43,6 +43,18 @@ class CurrentMemberNotifier extends StateNotifier<AsyncValue<Member>> {
           }
         }
       }
+    } else if (event.type == 'UserUpdate') {
+      final userData = event.data?['user'] as Map<String, dynamic>?;
+      if (userData != null) {
+        final updatedUser = User.fromJson(userData);
+        if (updatedUser.id == userId) {
+          state.whenData((member) {
+            if (mounted) {
+              state = AsyncValue.data(member.copyWith(user: updatedUser));
+            }
+          });
+        }
+      }
     }
   }
 
@@ -246,6 +258,19 @@ class ServerMembersNotifier extends StateNotifier<AsyncValue<List<Member>>> {
         state.whenData((members) {
           final newMembers = members.where((m) => m.userId != userId).toList();
           if (newMembers.length != members.length) {
+            state = AsyncValue.data(newMembers);
+          }
+        });
+      }
+    } else if (event.type == 'UserUpdate') {
+      final userData = event.data?['user'] as Map<String, dynamic>?;
+      if (userData != null) {
+        final updatedUser = User.fromJson(userData);
+        state.whenData((members) {
+          final index = members.indexWhere((m) => m.userId == updatedUser.id);
+          if (index != -1) {
+            final newMembers = List<Member>.from(members);
+            newMembers[index] = newMembers[index].copyWith(user: updatedUser);
             state = AsyncValue.data(newMembers);
           }
         });

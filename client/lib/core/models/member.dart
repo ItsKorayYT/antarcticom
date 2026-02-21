@@ -49,6 +49,7 @@ class Member {
   Member copyWith({
     String? nickname,
     List<String>? roles,
+    User? user,
     String? status,
   }) {
     return Member(
@@ -57,7 +58,7 @@ class Member {
       nickname: nickname ?? this.nickname,
       joinedAt: joinedAt,
       roles: roles ?? this.roles,
-      user: user,
+      user: user ?? this.user,
       status: status ?? this.status,
     );
   }
