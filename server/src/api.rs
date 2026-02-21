@@ -104,6 +104,14 @@ impl AppState {
         }
     }
 
+    /// Broadcast an event specifically to a single user's WebSocket sessions.
+    pub fn broadcast_to_user(&self, user_id: &Uuid, event: &WsEvent) {
+        if let Some(sender) = self.ws_sessions.get(user_id) {
+            let json = serde_json::to_string(event).unwrap_or_default();
+            let _ = sender.send(json);
+        }
+    }
+
     /// Broadcast an event to all connected members of a server.
     /// Deduplicates users who are subscribed to multiple channels in the same server.
     pub async fn broadcast_to_server(&self, server_id: &Uuid, event: &WsEvent) {
@@ -401,6 +409,23 @@ async fn upload_avatar(
 
         // Update DB
         db::users::update_avatar_hash(&state.db, auth.user_id, &hash).await?;
+
+        // Broadcast UserUpdate to all channels the user is in so clients update their avatars live
+        if let Ok(Some(updated_user)) = db::users::find_by_id(&state.db, auth.user_id).await {
+            let event = WsEvent::UserUpdate {
+                user: updated_user.into(),
+            };
+            
+            // Broadcast to all servers the user is a member of so other users see the update
+            if let Ok(servers) = db::servers::list_for_user(&state.db, auth.user_id).await {
+                for server in servers {
+                    state.broadcast_to_server(&server.id, &event).await;
+                }
+            }
+            
+            // Also broadcast directly to the user (their own sessions)
+            state.broadcast_to_user(&auth.user_id, &event);
+        }
 
         return Ok(Json(serde_json::json!({ "avatar_hash": hash })));
     }

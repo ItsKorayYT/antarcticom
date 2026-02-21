@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:image_picker/image_picker.dart';
-import 'package:image_cropper/image_cropper.dart';
+import 'package:crop_image/crop_image.dart';
 import '../../core/theme.dart';
 import '../../core/settings_provider.dart';
 import '../../core/auth_provider.dart';
@@ -498,38 +500,21 @@ class _AvatarSection extends StatelessWidget {
     if (image == null) return;
     if (!context.mounted) return;
 
-    // Crop the image
-    final cropper = ImageCropper();
-    final croppedFile = await cropper.cropImage(
-      sourcePath: image.path,
-      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
-      uiSettings: [
-        AndroidUiSettings(
-            toolbarTitle: 'Crop Avatar',
-            toolbarColor: AntarcticomTheme.bgSecondary,
-            toolbarWidgetColor: Colors.white,
-            initAspectRatio: CropAspectRatioPreset.square,
-            lockAspectRatio: true,
-            hideBottomControls: true),
-        IOSUiSettings(
-          title: 'Crop Avatar',
-          aspectRatioLockEnabled: true,
-          resetAspectRatioEnabled: false,
-          aspectRatioPickerButtonHidden: true,
-        ),
-        WebUiSettings(
-          context: context,
-          presentStyle: WebPresentStyle.dialog,
-          size: const CropperSize(width: 520, height: 520),
-        ),
-      ],
+    // Read image into bytes
+    final imageBytes = await image.readAsBytes();
+    if (!context.mounted) return;
+
+    // Show the custom crop dialog
+    final croppedBytes = await showDialog<Uint8List>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => _CropAvatarDialog(imageBytes: imageBytes),
     );
 
-    if (croppedFile == null) return;
+    if (croppedBytes == null) return;
 
     try {
-      final bytes = await croppedFile.readAsBytes();
-      final hash = await api.uploadAvatar(bytes, 'avatar.png');
+      final hash = await api.uploadAvatar(croppedBytes, 'avatar.png');
       authNotifier.updateAvatarHash(hash);
 
       if (context.mounted) {
@@ -643,6 +628,63 @@ class _ColorSwatch extends StatelessWidget {
         ),
         child: isSelected ? const Icon(Icons.check, color: Colors.white) : null,
       ),
+    );
+  }
+}
+
+class _CropAvatarDialog extends StatefulWidget {
+  final Uint8List imageBytes;
+  const _CropAvatarDialog({required this.imageBytes});
+
+  @override
+  State<_CropAvatarDialog> createState() => _CropAvatarDialogState();
+}
+
+class _CropAvatarDialogState extends State<_CropAvatarDialog> {
+  final _controller = CropController(aspectRatio: 1.0);
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Crop Avatar'),
+      backgroundColor: AntarcticomTheme.bgSecondary,
+      surfaceTintColor: Colors.transparent,
+      titleTextStyle: const TextStyle(
+          color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+      content: SizedBox(
+        width: 400,
+        height: 400,
+        child: CropImage(
+          controller: _controller,
+          image: Image.memory(widget.imageBytes),
+          paddingSize: 20,
+          alwaysMove: true,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+        ),
+        TextButton(
+          onPressed: () async {
+            final ui.Image bitmap = await _controller.croppedBitmap();
+            final ByteData? data =
+                await bitmap.toByteData(format: ui.ImageByteFormat.png);
+            if (data != null) {
+              if (context.mounted) {
+                Navigator.of(context).pop(data.buffer.asUint8List());
+              }
+            } else {
+              if (context.mounted) {
+                Navigator.of(context).pop();
+              }
+            }
+          },
+          child: const Text('Crop',
+              style: TextStyle(color: AntarcticomTheme.accentPrimary)),
+        ),
+      ],
     );
   }
 }

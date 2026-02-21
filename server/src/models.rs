@@ -327,6 +327,7 @@ pub enum WsEvent {
     MemberJoin { server_id: Uuid, user: UserPublic },
     MemberLeave { server_id: Uuid, user_id: Uuid },
     MemberUpdate { server_id: Uuid, member: Member },
+    UserUpdate { user: UserPublic },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

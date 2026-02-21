@@ -153,6 +153,37 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
       } catch (e) {
         // print('Error processing MessageDelete: $e');
       }
+    } else if (event.type == 'UserUpdate' && event.data != null) {
+      try {
+        final updatedUser =
+            User.fromJson(event.data!['user'] as Map<String, dynamic>);
+
+        // Scan the active message list for any sent by this user, and manually re-graft the fresh profile.
+        final newMsgs = state.messages.map((m) {
+          if (m.authorId == updatedUser.id) {
+            return MessageInfo(
+              id: m.id,
+              channelId: m.channelId,
+              authorId: m.authorId,
+              content: m.content,
+              createdAt: m.createdAt,
+              editedAt: m.editedAt,
+              isDeleted: m.isDeleted,
+              author: updatedUser,
+            );
+          }
+          return m;
+        }).toList();
+
+        if (newMsgs != state.messages) {
+          state = MessagesState(
+              messages: newMsgs,
+              isLoading: state.isLoading,
+              error: state.error);
+        }
+      } catch (e) {
+        // print('Error processing UserUpdate: $e');
+      }
     }
   }
 
