@@ -184,6 +184,19 @@ pub mod servers {
         Ok(servers)
     }
 
+    /// List all members for a specific server (used for broadcasting events).
+    pub async fn list_members(pool: &PgPool, server_id: Uuid) -> AppResult<Vec<crate::models::Member>> {
+        let members = sqlx::query_as::<_, crate::models::Member>(
+            r#"
+            SELECT * FROM members WHERE server_id = $1
+            "#,
+        )
+        .bind(server_id)
+        .fetch_all(pool)
+        .await?;
+        Ok(members)
+    }
+
     /// Transfer ownership of a server to a new user.
     pub async fn transfer_ownership(
         pool: &PgPool,

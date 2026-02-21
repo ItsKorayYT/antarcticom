@@ -113,21 +113,14 @@ impl AppState {
     }
 
     /// Broadcast an event to all connected members of a server.
-    /// Deduplicates users who are subscribed to multiple channels in the same server.
+    /// This directly queries all members of the server rather than just active channel listeners.
     pub async fn broadcast_to_server(&self, server_id: &Uuid, event: &WsEvent) {
-        // Collect unique user IDs across all channels in this server
-        let mut notified = std::collections::HashSet::new();
-        if let Ok(channels) = db::channels::list_for_server(&self.db, *server_id).await {
+        if let Ok(members) = db::servers::list_members(&self.db, *server_id).await {
             let json = serde_json::to_string(event).unwrap_or_default();
-            for channel in channels {
-                if let Some(user_ids) = self.channel_subs.get(&channel.id) {
-                    for user_id in user_ids.iter() {
-                        if notified.insert(*user_id) {
-                            if let Some(sender) = self.ws_sessions.get(user_id) {
-                                let _ = sender.send(json.clone());
-                            }
-                        }
-                    }
+            for member in members {
+                // Check if they are currently online by inspecting our active ws_sessions hash map
+                if let Some(sender) = self.ws_sessions.get(&member.user_id) {
+                    let _ = sender.send(json.clone());
                 }
             }
         }
