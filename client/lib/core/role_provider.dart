@@ -18,7 +18,10 @@ class RolesNotifier extends StateNotifier<RolesState> {
   final ApiService _api;
   final String serverId;
 
-  RolesNotifier(this._api, this.serverId) : super(const RolesState());
+  RolesNotifier(this._api, this.serverId)
+      : super(const RolesState(isLoading: true)) {
+    fetchRoles();
+  }
 
   Future<void> fetchRoles() async {
     state = const RolesState(isLoading: true);

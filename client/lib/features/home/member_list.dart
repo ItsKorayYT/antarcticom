@@ -6,6 +6,7 @@ import '../../core/models/permissions.dart';
 import '../../core/member_provider.dart';
 import '../../core/api_service.dart';
 import '../../core/auth_provider.dart';
+import '../../core/role_provider.dart';
 
 class MemberList extends ConsumerWidget {
   final String serverId;
@@ -122,7 +123,14 @@ class _MemberItem extends ConsumerWidget {
   }
 
   void _showUserProfile(
-      BuildContext context, WidgetRef ref, String? avatarUrl) {
+      BuildContext context,
+      WidgetRef ref,
+      String? avatarUrl,
+      bool canKick,
+      bool canBan,
+      bool canManageRoles,
+      bool targetIsAdmin,
+      bool isSelf) {
     final user = member.user;
     final name =
         member.nickname ?? user?.displayName ?? user?.username ?? 'Unknown';
@@ -145,20 +153,6 @@ class _MemberItem extends ConsumerWidget {
     ];
     final d = member.joinedAt;
     final joinedDate = '${months[d.month - 1]} ${d.day}, ${d.year}';
-
-    // Check permissions for the current user
-    final currentUserPerms = ref.watch(permissionsProvider(member.serverId));
-    final canKick = currentUserPerms.has(Permissions.kickMembers);
-    final canBan = currentUserPerms.has(Permissions.banMembers);
-    final canManageRoles = currentUserPerms.has(Permissions.administrator);
-
-    // Check permissions for the target user (to see if they are already an admin)
-    final targetUserPerms = ref.watch(memberPermissionsProvider(member));
-    final targetIsAdmin = targetUserPerms.has(Permissions.administrator);
-
-    // Ensure we don't show these actions on ourselves
-    final auth = ref.watch(authProvider);
-    final isSelf = auth.user?.id == member.userId;
 
     showDialog(
       context: context,
@@ -340,51 +334,60 @@ class _MemberItem extends ConsumerWidget {
                             children: [
                               if (canManageRoles)
                                 TextButton.icon(
-                                  onPressed: () async {
-                                    final api = ref.read(apiServiceProvider);
-                                    try {
-                                      final roles =
-                                          await api.listRoles(member.serverId);
-                                      var adminRole = roles
-                                          .where(
-                                            (r) =>
-                                                ((r['permissions'] as int) &
-                                                    32) !=
-                                                0,
-                                          )
-                                          .firstOrNull;
+                                  onPressed: targetIsAdmin
+                                      ? null
+                                      : () async {
+                                          final api =
+                                              ref.read(apiServiceProvider);
+                                          try {
+                                            final roles = await api
+                                                .listRoles(member.serverId);
+                                            var adminRole = roles
+                                                .where(
+                                                  (r) =>
+                                                      ((r['permissions']
+                                                              as int) &
+                                                          32) !=
+                                                      0,
+                                                )
+                                                .firstOrNull;
 
-                                      adminRole ??= await api.createRole(
-                                        member.serverId,
-                                        "Admin",
-                                        32, // Administrator permission
-                                        0, // default color
-                                        100, // high position
-                                      );
-                                      await api.assignRole(
-                                          member.serverId,
-                                          member.userId,
-                                          adminRole['id'] as String);
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                              content: Text(
-                                                  'User promoted to Admin!')),
-                                        );
-                                        Navigator.pop(context);
-                                      }
-                                    } catch (e) {
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          const SnackBar(
-                                              content: Text(
-                                                  'Failed to make user an Admin.')),
-                                        );
-                                      }
-                                    }
-                                  },
+                                            if (adminRole == null) {
+                                              adminRole = await api.createRole(
+                                                member.serverId,
+                                                "Admin",
+                                                32, // Administrator permission
+                                                0, // default color
+                                                100, // high position
+                                              );
+                                              // Tell RolesNotifier about the new role
+                                              ref.invalidate(rolesProvider(
+                                                  member.serverId));
+                                            }
+                                            await api.assignRole(
+                                                member.serverId,
+                                                member.userId,
+                                                adminRole['id'] as String);
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                const SnackBar(
+                                                    content: Text(
+                                                        'User promoted to Admin!')),
+                                              );
+                                              Navigator.pop(context);
+                                            }
+                                          } catch (e) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                const SnackBar(
+                                                    content: Text(
+                                                        'Failed to make user an Admin.')),
+                                              );
+                                            }
+                                          }
+                                        },
                                   icon: Icon(Icons.admin_panel_settings,
                                       size: 18,
                                       color: targetIsAdmin
@@ -476,6 +479,20 @@ class _MemberItem extends ConsumerWidget {
     final avatarUrl = _buildAvatarUrl(baseUrl, user?.id, user?.avatarHash);
     final statusColor = _statusColor(member.status);
 
+    // Check permissions for the current user
+    final currentUserPerms = ref.watch(permissionsProvider(member.serverId));
+    final canKick = currentUserPerms.has(Permissions.kickMembers);
+    final canBan = currentUserPerms.has(Permissions.banMembers);
+    final canManageRoles = currentUserPerms.has(Permissions.administrator);
+
+    // Check permissions for the target user (to see if they are already an admin)
+    final targetUserPerms = ref.watch(memberPermissionsProvider(member));
+    final targetIsAdmin = targetUserPerms.has(Permissions.administrator);
+
+    // Ensure we don't show these actions on ourselves
+    final auth = ref.watch(authProvider);
+    final isSelf = auth.user?.id == member.userId;
+
     return ListTile(
       leading: Stack(
         children: [
@@ -513,7 +530,8 @@ class _MemberItem extends ConsumerWidget {
       ),
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-      onTap: () => _showUserProfile(context, ref, avatarUrl),
+      onTap: () => _showUserProfile(context, ref, avatarUrl, canKick, canBan,
+          canManageRoles, targetIsAdmin, isSelf),
     );
   }
 }
