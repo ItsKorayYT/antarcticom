@@ -204,23 +204,41 @@ class _MemberItem extends ConsumerWidget {
                             width: 5,
                           ),
                         ),
-                        child: CircleAvatar(
-                          radius: 36,
-                          backgroundColor: AntarcticomTheme.bgTertiary,
-                          backgroundImage: avatarUrl != null
-                              ? NetworkImage(avatarUrl)
-                              : null,
-                          child: avatarUrl == null
-                              ? Text(
+                        child: avatarUrl != null
+                            ? ClipOval(
+                                child: Image.network(
+                                  avatarUrl,
+                                  width: 72,
+                                  height: 72,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      CircleAvatar(
+                                    radius: 36,
+                                    backgroundColor:
+                                        AntarcticomTheme.bgTertiary,
+                                    child: Text(
+                                      name[0].toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 28,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : CircleAvatar(
+                                radius: 36,
+                                backgroundColor: AntarcticomTheme.bgTertiary,
+                                child: Text(
                                   name[0].toUpperCase(),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 28,
                                     fontWeight: FontWeight.bold,
                                   ),
-                                )
-                              : null,
-                        ),
+                                ),
+                              ),
                       ),
                       Positioned(
                         right: 2,
@@ -464,14 +482,25 @@ class _MemberItem extends ConsumerWidget {
     return ListTile(
       leading: Stack(
         children: [
-          CircleAvatar(
-            backgroundColor: AntarcticomTheme.bgTertiary,
-            backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
-            child: avatarUrl == null
-                ? Text(name[0].toUpperCase(),
-                    style: const TextStyle(color: Colors.white))
-                : null,
-          ),
+          avatarUrl != null
+              ? ClipOval(
+                  child: Image.network(
+                    avatarUrl,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => CircleAvatar(
+                      backgroundColor: AntarcticomTheme.bgTertiary,
+                      child: Text(name[0].toUpperCase(),
+                          style: const TextStyle(color: Colors.white)),
+                    ),
+                  ),
+                )
+              : CircleAvatar(
+                  backgroundColor: AntarcticomTheme.bgTertiary,
+                  child: Text(name[0].toUpperCase(),
+                      style: const TextStyle(color: Colors.white)),
+                ),
           Positioned(
             right: 0,
             bottom: 0,

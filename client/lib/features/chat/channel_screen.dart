@@ -357,6 +357,17 @@ class _MessageBubble extends ConsumerWidget {
                           ? '$baseUrl/api/avatars/$authorId/$avatarHash'
                           : null;
 
+                  Widget initialsFallback = Center(
+                    child: Text(
+                      authorName.isNotEmpty ? authorName[0].toUpperCase() : '?',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  );
+
                   return Container(
                     width: 36,
                     height: 36,
@@ -368,24 +379,18 @@ class _MessageBubble extends ConsumerWidget {
                             ),
                       shape: BoxShape.circle,
                     ),
-                    child: CircleAvatar(
-                      radius: 18,
-                      backgroundColor: Colors.transparent,
-                      backgroundImage:
-                          avatarUrl != null ? NetworkImage(avatarUrl) : null,
-                      child: avatarUrl == null
-                          ? Text(
-                              authorName.isNotEmpty
-                                  ? authorName[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 14,
-                              ),
-                            )
-                          : null,
-                    ),
+                    child: avatarUrl != null
+                        ? ClipOval(
+                            child: Image.network(
+                              avatarUrl,
+                              width: 36,
+                              height: 36,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  initialsFallback,
+                            ),
+                          )
+                        : initialsFallback,
                   );
                 }),
                 const SizedBox(width: AntarcticomTheme.spacingSm),
