@@ -71,6 +71,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         final serverExists = next.servers.any((s) => s.id == selectedServerId);
         if (!serverExists) {
           Future.microtask(() {
+            if (!mounted) return;
             ref.read(selectedServerIdProvider.notifier).state = null;
             ref.read(channelsProvider.notifier).clear();
             ref.read(selectedChannelIdProvider.notifier).state = null;

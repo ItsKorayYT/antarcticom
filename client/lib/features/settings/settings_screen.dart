@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:image_cropper/image_cropper.dart';
 import '../../core/theme.dart';
 import '../../core/settings_provider.dart';
 import '../../core/auth_provider.dart';
@@ -493,28 +494,62 @@ class _AvatarSection extends StatelessWidget {
     final picker = ImagePicker();
     final image = await picker.pickImage(
       source: ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 85,
     );
     if (image == null) return;
+    if (!context.mounted) return;
+
+    // Crop the image
+    final cropper = ImageCropper();
+    final croppedFile = await cropper.cropImage(
+      sourcePath: image.path,
+      aspectRatio: const CropAspectRatio(ratioX: 1, ratioY: 1),
+      uiSettings: [
+        AndroidUiSettings(
+            toolbarTitle: 'Crop Avatar',
+            toolbarColor: AntarcticomTheme.bgSecondary,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            hideBottomControls: true),
+        IOSUiSettings(
+          title: 'Crop Avatar',
+          aspectRatioLockEnabled: true,
+          resetAspectRatioEnabled: false,
+          aspectRatioPickerButtonHidden: true,
+        ),
+        WebUiSettings(
+          context: context,
+          presentStyle: WebPresentStyle.dialog,
+          size: const CropperSize(width: 520, height: 520),
+        ),
+      ],
+    );
+
+    if (croppedFile == null) return;
 
     try {
-      final hash = await api.uploadAvatar(image.path);
+      final bytes = await croppedFile.readAsBytes();
+      final hash = await api.uploadAvatar(bytes, 'avatar.png');
       authNotifier.updateAvatarHash(hash);
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Avatar updated!'),
-          backgroundColor: Colors.green,
-        ),
-      );
+
+      if (context.mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Avatar updated!'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
     } catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text('Failed to upload avatar: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (context.mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('Failed to upload avatar: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 }

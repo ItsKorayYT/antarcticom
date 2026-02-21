@@ -241,9 +241,9 @@ class ApiService {
   // ─── Avatars ─────────────────────────────────────────────────────────
 
   /// Upload an avatar image file. Returns the new avatar hash.
-  Future<String> uploadAvatar(String filePath) async {
+  Future<String> uploadAvatar(List<int> bytes, String filename) async {
     final formData = FormData.fromMap({
-      'avatar': await MultipartFile.fromFile(filePath),
+      'avatar': MultipartFile.fromBytes(bytes, filename: filename),
     });
     final response = await _dio.put(
       '/api/users/@me/avatar',

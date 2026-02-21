@@ -43,6 +43,8 @@ dependencies:
   cryptography: ^2.7.0
   pointycastle: ^3.7.0
   flutter_colorpicker: ^1.1.0
+  image_cropper: ^11.0.0
+  image_cropper_for_web: ^7.0.0
 
 dev_dependencies:
   flutter_test:

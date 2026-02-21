@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_service.dart';
 import 'socket_service.dart';
@@ -13,13 +14,20 @@ class CurrentMemberNotifier extends StateNotifier<AsyncValue<Member>> {
   final SocketService _socket;
   final String serverId;
   final String? userId;
+  StreamSubscription<WsEvent>? _socketSubscription;
 
   CurrentMemberNotifier(this._api, this._socket, this.serverId, this.userId)
       : super(const AsyncValue.loading()) {
     if (userId != null) {
       fetchMember();
     }
-    _socket.events.listen(_handleEvent);
+    _socketSubscription = _socket.events.listen(_handleEvent);
+  }
+
+  @override
+  void dispose() {
+    _socketSubscription?.cancel();
+    super.dispose();
   }
 
   void _handleEvent(WsEvent event) {
@@ -30,7 +38,9 @@ class CurrentMemberNotifier extends StateNotifier<AsyncValue<Member>> {
       if (eventServerId == serverId && memberData != null) {
         final updatedMember = Member.fromJson(memberData);
         if (updatedMember.userId == userId) {
-          state = AsyncValue.data(updatedMember);
+          if (mounted) {
+            state = AsyncValue.data(updatedMember);
+          }
         }
       }
     }

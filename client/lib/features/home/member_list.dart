@@ -5,6 +5,7 @@ import '../../core/models/member.dart';
 import '../../core/models/permissions.dart';
 import '../../core/member_provider.dart';
 import '../../core/api_service.dart';
+import '../../core/server_provider.dart';
 import '../../core/auth_provider.dart';
 import '../../core/role_provider.dart';
 
@@ -122,6 +123,14 @@ class _MemberItem extends ConsumerWidget {
     }
   }
 
+  void _showRoleManagerDialog(
+      BuildContext context, WidgetRef ref, Member targetMember) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _RoleManagerDialog(member: targetMember),
+    );
+  }
+
   void _showUserProfile(
       BuildContext context,
       WidgetRef ref,
@@ -130,7 +139,8 @@ class _MemberItem extends ConsumerWidget {
       bool canBan,
       bool canManageRoles,
       bool targetIsAdmin,
-      bool isSelf) {
+      bool isSelf,
+      bool targetIsOwner) {
     final user = member.user;
     final name =
         member.nickname ?? user?.displayName ?? user?.username ?? 'Unknown';
@@ -251,7 +261,18 @@ class _MemberItem extends ConsumerWidget {
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            if (targetIsAdmin) ...[
+                            if (targetIsOwner) ...[
+                              const SizedBox(width: 8),
+                              const Tooltip(
+                                message: 'Server Owner',
+                                child: Icon(
+                                  Icons
+                                      .workspace_premium, // Crown icon approximation
+                                  color: Colors.amber,
+                                  size: 20,
+                                ),
+                              ),
+                            ] else if (targetIsAdmin) ...[
                               const SizedBox(width: 8),
                               const Tooltip(
                                 message: 'Server Admin',
@@ -325,6 +346,7 @@ class _MemberItem extends ConsumerWidget {
 
                         // Admin Actions
                         if (!isSelf &&
+                            !targetIsOwner &&
                             (canKick || canBan || canManageRoles)) ...[
                           const SizedBox(height: 24),
                           Wrap(
@@ -334,94 +356,13 @@ class _MemberItem extends ConsumerWidget {
                             children: [
                               if (canManageRoles)
                                 TextButton.icon(
-                                  onPressed: () async {
-                                    final api = ref.read(apiServiceProvider);
-                                    try {
-                                      final roles =
-                                          await api.listRoles(member.serverId);
-                                      var adminRole = roles
-                                          .where(
-                                            (r) =>
-                                                ((r['permissions'] as int) &
-                                                    32) !=
-                                                0,
-                                          )
-                                          .firstOrNull;
-
-                                      if (targetIsAdmin) {
-                                        // Remove Admin privileges
-                                        if (adminRole != null) {
-                                          await api.removeRole(
-                                              member.serverId,
-                                              member.userId,
-                                              adminRole['id'] as String);
-
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
-                                              const SnackBar(
-                                                  content: Text(
-                                                      'User is no longer an Admin.')),
-                                            );
-                                            Navigator.pop(context);
-                                          }
-                                        }
-                                      } else {
-                                        // Grant Admin privileges
-                                        if (adminRole == null) {
-                                          adminRole = await api.createRole(
-                                            member.serverId,
-                                            "Admin",
-                                            32, // Administrator permission
-                                            0, // default color
-                                            100, // high position
-                                          );
-                                          // Tell RolesNotifier about the new role
-                                          ref.invalidate(
-                                              rolesProvider(member.serverId));
-                                        }
-                                        await api.assignRole(
-                                            member.serverId,
-                                            member.userId,
-                                            adminRole['id'] as String);
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(
-                                            const SnackBar(
-                                                content: Text(
-                                                    'User promoted to Admin!')),
-                                          );
-                                          Navigator.pop(context);
-                                        }
-                                      }
-                                    } catch (e) {
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                              content: Text(targetIsAdmin
-                                                  ? 'Failed to remove user from Admin.'
-                                                  : 'Failed to make user an Admin.')),
-                                        );
-                                      }
-                                    }
-                                  },
-                                  icon: Icon(
-                                      targetIsAdmin
-                                          ? Icons.remove_moderator
-                                          : Icons.admin_panel_settings,
-                                      size: 18,
-                                      color: targetIsAdmin
-                                          ? Colors.redAccent
-                                          : Colors.blueAccent),
-                                  label: Text(
-                                      targetIsAdmin
-                                          ? 'Remove Admin'
-                                          : 'Make Admin',
+                                  onPressed: () => _showRoleManagerDialog(
+                                      context, ref, member),
+                                  icon: const Icon(Icons.stars,
+                                      size: 18, color: Colors.purpleAccent),
+                                  label: const Text('Manage Roles',
                                       style: TextStyle(
-                                          color: targetIsAdmin
-                                              ? Colors.redAccent
-                                              : Colors.blueAccent)),
+                                          color: Colors.purpleAccent)),
                                 ),
                               if (canKick)
                                 TextButton.icon(
@@ -510,6 +451,12 @@ class _MemberItem extends ConsumerWidget {
     final targetUserPerms = ref.watch(memberPermissionsProvider(member));
     final targetIsAdmin = targetUserPerms.has(Permissions.administrator);
 
+    // Check if target is owner
+    final targetIsOwner = ref
+        .watch(serversProvider)
+        .servers
+        .any((s) => s.id == member.serverId && s.ownerId == member.userId);
+
     // Ensure we don't show these actions on ourselves
     final auth = ref.watch(authProvider);
     final isSelf = auth.user?.id == member.userId;
@@ -552,7 +499,162 @@ class _MemberItem extends ConsumerWidget {
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       onTap: () => _showUserProfile(context, ref, avatarUrl, canKick, canBan,
-          canManageRoles, targetIsAdmin, isSelf),
+          canManageRoles, targetIsAdmin, isSelf, targetIsOwner),
     );
+  }
+}
+
+class _RoleManagerDialog extends ConsumerStatefulWidget {
+  final Member member;
+
+  const _RoleManagerDialog({required this.member});
+
+  @override
+  ConsumerState<_RoleManagerDialog> createState() => _RoleManagerDialogState();
+}
+
+class _RoleManagerDialogState extends ConsumerState<_RoleManagerDialog> {
+  final Set<String> _processingRoleIds = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final rolesState = ref.watch(rolesProvider(widget.member.serverId));
+
+    return Dialog(
+      backgroundColor: AntarcticomTheme.bgSecondary,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Manage Roles',
+                style: TextStyle(
+                  color: AntarcticomTheme.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (rolesState.isLoading && rolesState.roles.isEmpty)
+                const Center(child: CircularProgressIndicator())
+              else if (rolesState.error != null)
+                Center(
+                  child: Text(
+                    rolesState.error!,
+                    style: const TextStyle(color: Colors.redAccent),
+                  ),
+                )
+              else if (rolesState.roles
+                  .where((r) => r.name != '@everyone')
+                  .isEmpty)
+                const Center(
+                  child: Text(
+                    'No custom roles found.',
+                    style: TextStyle(color: AntarcticomTheme.textSecondary),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: rolesState.roles.length,
+                    itemBuilder: (context, index) {
+                      final role = rolesState.roles[index];
+                      // Don't allow modifying @everyone here
+                      if (role.name == '@everyone') {
+                        return const SizedBox.shrink();
+                      }
+
+                      final hasRole = widget.member.roles.contains(role.id);
+                      final isProcessing = _processingRoleIds.contains(role.id);
+
+                      return CheckboxListTile(
+                        title: Text(
+                          role.name,
+                          style: TextStyle(
+                            color: Color(role.color == 0
+                                ? 0xFFFFFFFF
+                                : (role.color | 0xFF000000)),
+                            fontWeight:
+                                hasRole ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        value: hasRole,
+                        activeColor: AntarcticomTheme.accentPrimary,
+                        checkColor: Colors.white,
+                        onChanged: isProcessing
+                            ? null
+                            : (bool? value) =>
+                                _toggleRole(role.id, value ?? false),
+                        secondary: isProcessing
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2))
+                            : null,
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: 24),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close',
+                      style: TextStyle(color: Colors.white)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleRole(String roleId, bool assign) async {
+    setState(() {
+      _processingRoleIds.add(roleId);
+    });
+
+    try {
+      final api = ref.read(apiServiceProvider);
+      if (assign) {
+        await api.assignRole(
+            widget.member.serverId, widget.member.userId, roleId);
+      } else {
+        await api.removeRole(
+            widget.member.serverId, widget.member.userId, roleId);
+      }
+
+      // Close both the role manager dialog and the user profile dialog to force a refresh
+      if (mounted) {
+        Navigator.of(context).pop();
+        Navigator.of(context).pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                assign ? 'Failed to assign role.' : 'Failed to remove role.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingRoleIds.remove(roleId);
+        });
+      }
+    }
   }
 }
