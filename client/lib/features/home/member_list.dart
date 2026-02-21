@@ -354,15 +354,13 @@ class _MemberItem extends ConsumerWidget {
                                           )
                                           .firstOrNull;
 
-                                      if (adminRole == null) {
-                                        adminRole = await api.createRole(
-                                          member.serverId,
-                                          "Admin",
-                                          32, // Administrator permission
-                                          0, // default color
-                                          100, // high position
-                                        );
-                                      }
+                                      adminRole ??= await api.createRole(
+                                        member.serverId,
+                                        "Admin",
+                                        32, // Administrator permission
+                                        0, // default color
+                                        100, // high position
+                                      );
                                       await api.assignRole(
                                           member.serverId,
                                           member.userId,
@@ -408,8 +406,9 @@ class _MemberItem extends ConsumerWidget {
                                     try {
                                       await api.kickMember(
                                           member.serverId, member.userId);
-                                      if (context.mounted)
+                                      if (context.mounted) {
                                         Navigator.pop(context);
+                                      }
                                     } catch (e) {
                                       if (context.mounted) {
                                         ScaffoldMessenger.of(context)
@@ -433,8 +432,9 @@ class _MemberItem extends ConsumerWidget {
                                     try {
                                       await api.banMember(
                                           member.serverId, member.userId);
-                                      if (context.mounted)
+                                      if (context.mounted) {
                                         Navigator.pop(context);
+                                      }
                                     } catch (e) {
                                       if (context.mounted) {
                                         ScaffoldMessenger.of(context)

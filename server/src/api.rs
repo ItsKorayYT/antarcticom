@@ -828,6 +828,14 @@ async fn assign_role(
 ) -> AppResult<StatusCode> {
     check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_SERVER).await?;
     db::members::add_role(&state.db, user_id, server_id, role_id).await?;
+
+    if let Ok(Some(member)) = db::members::find(&state.db, user_id, server_id).await {
+        state.broadcast_to_server(&server_id, &WsEvent::MemberUpdate {
+            server_id,
+            member,
+        }).await;
+    }
+
     Ok(StatusCode::OK)
 }
 
@@ -838,6 +846,14 @@ async fn remove_role(
 ) -> AppResult<StatusCode> {
     check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_SERVER).await?;
     db::members::remove_role(&state.db, user_id, server_id, role_id).await?;
+
+    if let Ok(Some(member)) = db::members::find(&state.db, user_id, server_id).await {
+        state.broadcast_to_server(&server_id, &WsEvent::MemberUpdate {
+            server_id,
+            member,
+        }).await;
+    }
+
     Ok(StatusCode::OK)
 }
 

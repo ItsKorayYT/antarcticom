@@ -10,13 +10,29 @@ import 'models/permissions.dart';
 
 class CurrentMemberNotifier extends StateNotifier<AsyncValue<Member>> {
   final ApiService _api;
+  final SocketService _socket;
   final String serverId;
   final String? userId;
 
-  CurrentMemberNotifier(this._api, this.serverId, this.userId)
+  CurrentMemberNotifier(this._api, this._socket, this.serverId, this.userId)
       : super(const AsyncValue.loading()) {
     if (userId != null) {
       fetchMember();
+    }
+    _socket.events.listen(_handleEvent);
+  }
+
+  void _handleEvent(WsEvent event) {
+    if (event.type == 'MemberUpdate') {
+      final eventServerId = event.data?['server_id'] as String?;
+      final memberData = event.data?['member'] as Map<String, dynamic>?;
+
+      if (eventServerId == serverId && memberData != null) {
+        final updatedMember = Member.fromJson(memberData);
+        if (updatedMember.userId == userId) {
+          state = AsyncValue.data(updatedMember);
+        }
+      }
     }
   }
 
@@ -36,8 +52,9 @@ final currentMemberProvider = StateNotifierProvider.family<
     CurrentMemberNotifier, AsyncValue<Member>, String>(
   (ref, serverId) {
     final api = ref.watch(apiServiceProvider);
+    final socket = ref.watch(socketServiceProvider);
     final user = ref.watch(authProvider).user;
-    return CurrentMemberNotifier(api, serverId, user?.id);
+    return CurrentMemberNotifier(api, socket, serverId, user?.id);
   },
 );
 
@@ -185,6 +202,28 @@ class ServerMembersNotifier extends StateNotifier<AsyncValue<List<Member>>> {
               status: 'online',
             );
             final newMembers = List<Member>.from(members)..add(newMember);
+            state = AsyncValue.data(newMembers);
+          }
+        });
+      }
+    } else if (event.type == 'MemberUpdate') {
+      final eventServerId = event.data?['server_id'] as String?;
+      final memberData = event.data?['member'] as Map<String, dynamic>?;
+
+      if (eventServerId == serverId && memberData != null) {
+        state.whenData((members) {
+          final updatedMember = Member.fromJson(memberData);
+          final index =
+              members.indexWhere((m) => m.userId == updatedMember.userId);
+
+          if (index != -1) {
+            // Keep the previous status since Member data from DB might not have the realtime status included
+            final newMembers = List<Member>.from(members);
+            newMembers[index] =
+                updatedMember.copyWith(status: members[index].status);
+            state = AsyncValue.data(newMembers);
+          } else {
+            final newMembers = List<Member>.from(members)..add(updatedMember);
             state = AsyncValue.data(newMembers);
           }
         });

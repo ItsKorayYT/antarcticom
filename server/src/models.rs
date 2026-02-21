@@ -326,6 +326,7 @@ pub enum WsEvent {
     ChannelCreate(Channel),
     MemberJoin { server_id: Uuid, user: UserPublic },
     MemberLeave { server_id: Uuid, user_id: Uuid },
+    MemberUpdate { server_id: Uuid, member: Member },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
