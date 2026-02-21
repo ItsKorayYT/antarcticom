@@ -334,72 +334,93 @@ class _MemberItem extends ConsumerWidget {
                             children: [
                               if (canManageRoles)
                                 TextButton.icon(
-                                  onPressed: targetIsAdmin
-                                      ? null
-                                      : () async {
-                                          final api =
-                                              ref.read(apiServiceProvider);
-                                          try {
-                                            final roles = await api
-                                                .listRoles(member.serverId);
-                                            var adminRole = roles
-                                                .where(
-                                                  (r) =>
-                                                      ((r['permissions']
-                                                              as int) &
-                                                          32) !=
-                                                      0,
-                                                )
-                                                .firstOrNull;
+                                  onPressed: () async {
+                                    final api = ref.read(apiServiceProvider);
+                                    try {
+                                      final roles =
+                                          await api.listRoles(member.serverId);
+                                      var adminRole = roles
+                                          .where(
+                                            (r) =>
+                                                ((r['permissions'] as int) &
+                                                    32) !=
+                                                0,
+                                          )
+                                          .firstOrNull;
 
-                                            if (adminRole == null) {
-                                              adminRole = await api.createRole(
-                                                member.serverId,
-                                                "Admin",
-                                                32, // Administrator permission
-                                                0, // default color
-                                                100, // high position
-                                              );
-                                              // Tell RolesNotifier about the new role
-                                              ref.invalidate(rolesProvider(
-                                                  member.serverId));
-                                            }
-                                            await api.assignRole(
-                                                member.serverId,
-                                                member.userId,
-                                                adminRole['id'] as String);
-                                            if (context.mounted) {
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                    content: Text(
-                                                        'User promoted to Admin!')),
-                                              );
-                                              Navigator.pop(context);
-                                            }
-                                          } catch (e) {
-                                            if (context.mounted) {
-                                              ScaffoldMessenger.of(context)
-                                                  .showSnackBar(
-                                                const SnackBar(
-                                                    content: Text(
-                                                        'Failed to make user an Admin.')),
-                                              );
-                                            }
+                                      if (targetIsAdmin) {
+                                        // Remove Admin privileges
+                                        if (adminRole != null) {
+                                          await api.removeRole(
+                                              member.serverId,
+                                              member.userId,
+                                              adminRole['id'] as String);
+
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                  content: Text(
+                                                      'User is no longer an Admin.')),
+                                            );
+                                            Navigator.pop(context);
                                           }
-                                        },
-                                  icon: Icon(Icons.admin_panel_settings,
+                                        }
+                                      } else {
+                                        // Grant Admin privileges
+                                        if (adminRole == null) {
+                                          adminRole = await api.createRole(
+                                            member.serverId,
+                                            "Admin",
+                                            32, // Administrator permission
+                                            0, // default color
+                                            100, // high position
+                                          );
+                                          // Tell RolesNotifier about the new role
+                                          ref.invalidate(
+                                              rolesProvider(member.serverId));
+                                        }
+                                        await api.assignRole(
+                                            member.serverId,
+                                            member.userId,
+                                            adminRole['id'] as String);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            const SnackBar(
+                                                content: Text(
+                                                    'User promoted to Admin!')),
+                                          );
+                                          Navigator.pop(context);
+                                        }
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                              content: Text(targetIsAdmin
+                                                  ? 'Failed to remove user from Admin.'
+                                                  : 'Failed to make user an Admin.')),
+                                        );
+                                      }
+                                    }
+                                  },
+                                  icon: Icon(
+                                      targetIsAdmin
+                                          ? Icons.remove_moderator
+                                          : Icons.admin_panel_settings,
                                       size: 18,
                                       color: targetIsAdmin
-                                          ? Colors.grey
+                                          ? Colors.redAccent
                                           : Colors.blueAccent),
                                   label: Text(
                                       targetIsAdmin
-                                          ? 'Already Admin'
+                                          ? 'Remove Admin'
                                           : 'Make Admin',
                                       style: TextStyle(
                                           color: targetIsAdmin
-                                              ? Colors.grey
+                                              ? Colors.redAccent
                                               : Colors.blueAccent)),
                                 ),
                               if (canKick)
