@@ -233,6 +233,16 @@ pub struct VoiceSession {
     pub deafened: bool,
 }
 
+/// Lightweight voice participant for signaling (no DB backing).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VoiceParticipant {
+    pub user_id: Uuid,
+    pub channel_id: Uuid,
+    pub muted: bool,
+    pub deafened: bool,
+    pub user: Option<UserPublic>,
+}
+
 // ─── Bans ───────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
@@ -317,7 +327,14 @@ pub enum WsEvent {
     TypingStart { channel_id: Uuid, user_id: Uuid },
 
     // Voice
-    VoiceStateUpdate(VoiceSession),
+    VoiceStateUpdate {
+        channel_id: Uuid,
+        user_id: Uuid,
+        joined: bool,
+        muted: bool,
+        deafened: bool,
+        user: Option<UserPublic>,
+    },
     VoiceServerUpdate { endpoint: String, token: String },
 
     // Server

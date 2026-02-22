@@ -257,6 +257,34 @@ class ApiService {
   String avatarUrl(String userId, String hash) =>
       '$_baseUrl/api/avatars/$userId/$hash';
 
+  // ─── Voice ──────────────────────────────────────────────────────────
+
+  /// Join a voice channel. Returns the current participant list.
+  Future<List<dynamic>> joinVoiceChannel(String channelId) async {
+    final response = await _dio.post('/api/voice/$channelId/join');
+    return response.data as List<dynamic>;
+  }
+
+  /// Leave a voice channel.
+  Future<void> leaveVoiceChannel(String channelId) async {
+    await _dio.post('/api/voice/$channelId/leave');
+  }
+
+  /// Update mute/deafen state in a voice channel.
+  Future<void> updateVoiceState(String channelId,
+      {bool? muted, bool? deafened}) async {
+    await _dio.patch('/api/voice/$channelId/state', data: {
+      if (muted != null) 'muted': muted,
+      if (deafened != null) 'deafened': deafened,
+    });
+  }
+
+  /// Get participants in a voice channel.
+  Future<List<dynamic>> getVoiceParticipants(String channelId) async {
+    final response = await _dio.get('/api/voice/$channelId/participants');
+    return response.data as List<dynamic>;
+  }
+
   // ─── Getters ────────────────────────────────────────────────────────
   String get baseUrl => _baseUrl;
   String get wsUrl => _baseUrl.replaceFirst('http', 'ws');

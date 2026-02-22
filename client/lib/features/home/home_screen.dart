@@ -6,6 +6,7 @@ import '../../core/auth_provider.dart';
 import '../../core/server_provider.dart';
 import '../../core/connection_manager.dart';
 import '../../core/channel_provider.dart';
+import '../../core/voice_provider.dart';
 import '../../core/settings_provider.dart';
 import '../../core/api_service.dart';
 import 'background_manager.dart';
@@ -263,6 +264,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               child: _buildChannelListContent(
                   servers, selectedServerId, channels, selectedChannelId),
             ),
+            // Voice status panel
+            _buildVoiceStatusPanel(),
             // User Panel
             _buildUserPanel(user, context, settings),
           ],
@@ -494,15 +497,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               isVoice: true),
           serverId: selectedServerId,
         ),
-        ...channels.voiceChannels.map((ch) => _ChannelItem(
+        ...channels.voiceChannels.expand((ch) {
+          final voiceState = ref.watch(voiceProvider);
+          final isInChannel = voiceState.currentChannelId == ch.id;
+          final participants = voiceState.participantsFor(ch.id);
+          return [
+            _ChannelItem(
               name: ch.name,
               icon: Icons.volume_up,
               isVoice: true,
-              isActive: selectedChannelId == ch.id,
-              onTap: () {},
+              isActive: isInChannel,
+              onTap: () => ref.read(voiceProvider.notifier).joinChannel(ch.id),
               onDelete: () => _showDeleteChannelDialog(
                   context, selectedServerId, ch.id, ch.name),
-            )),
+            ),
+            // Show participants when channel has users
+            ...participants.map((p) => Padding(
+                  padding: const EdgeInsets.only(left: 28.0, top: 1, bottom: 1),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.person,
+                        size: 14,
+                        color: AntarcticomTheme.textMuted,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          p.displayName ?? p.userId.substring(0, 8),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AntarcticomTheme.textSecondary,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (p.muted)
+                        const Icon(Icons.mic_off,
+                            size: 12, color: Colors.redAccent),
+                      if (p.deafened)
+                        const Padding(
+                          padding: EdgeInsets.only(left: 2),
+                          child: Icon(Icons.headset_off,
+                              size: 12, color: Colors.redAccent),
+                        ),
+                    ],
+                  ),
+                )),
+          ];
+        }),
       ],
     );
   }
@@ -527,6 +570,100 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             style: const TextStyle(
                 color: AntarcticomTheme.textMuted, fontSize: 14),
             textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVoiceStatusPanel() {
+    final voiceState = ref.watch(voiceProvider);
+    if (voiceState.currentChannelId == null) {
+      return const SizedBox.shrink();
+    }
+
+    // Try to find the channel name from channels state
+    final channels = ref.watch(channelsProvider);
+    final channelName = channels.voiceChannels
+            .where((ch) => ch.id == voiceState.currentChannelId)
+            .map((ch) => ch.name)
+            .firstOrNull ??
+        'Voice Channel';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AntarcticomTheme.spacingSm,
+        vertical: 6,
+      ),
+      decoration: BoxDecoration(
+        color: AntarcticomTheme.bgTertiary,
+        border: Border(
+          top: BorderSide(
+            color: AntarcticomTheme.accentPrimary.withValues(alpha: 0.3),
+          ),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header: "Voice Connected"
+          Row(
+            children: [
+              Icon(Icons.signal_cellular_alt,
+                  size: 14, color: AntarcticomTheme.online),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Voice Connected',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: AntarcticomTheme.online,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Channel name
+          Padding(
+            padding: const EdgeInsets.only(left: 20),
+            child: Text(
+              channelName,
+              style: const TextStyle(
+                fontSize: 11,
+                color: AntarcticomTheme.textSecondary,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(height: 4),
+          // Controls: mute, deafen, disconnect
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              _VoiceControlButton(
+                icon: voiceState.muted ? Icons.mic_off : Icons.mic,
+                isActive: voiceState.muted,
+                onTap: () => ref.read(voiceProvider.notifier).toggleMute(),
+                tooltip: voiceState.muted ? 'Unmute' : 'Mute',
+              ),
+              const SizedBox(width: 8),
+              _VoiceControlButton(
+                icon: voiceState.deafened ? Icons.headset_off : Icons.headset,
+                isActive: voiceState.deafened,
+                onTap: () => ref.read(voiceProvider.notifier).toggleDeafen(),
+                tooltip: voiceState.deafened ? 'Undeafen' : 'Deafen',
+              ),
+              const SizedBox(width: 8),
+              _VoiceControlButton(
+                icon: Icons.call_end,
+                isActive: true,
+                activeColor: Colors.redAccent,
+                onTap: () => ref.read(voiceProvider.notifier).leaveChannel(),
+                tooltip: 'Disconnect',
+              ),
+            ],
           ),
         ],
       ),
@@ -1056,6 +1193,50 @@ class _ChannelItemState extends State<_ChannelItem> {
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Voice Control Button ───────────────────────────────────────────────
+
+class _VoiceControlButton extends StatelessWidget {
+  final IconData icon;
+  final bool isActive;
+  final VoidCallback onTap;
+  final String tooltip;
+  final Color activeColor;
+
+  const _VoiceControlButton({
+    required this.icon,
+    required this.isActive,
+    required this.onTap,
+    required this.tooltip,
+    this.activeColor = Colors.redAccent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AntarcticomTheme.radiusFull),
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: isActive
+                ? activeColor.withValues(alpha: 0.2)
+                : AntarcticomTheme.bgPrimary,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            size: 16,
+            color: isActive ? activeColor : AntarcticomTheme.textSecondary,
           ),
         ),
       ),

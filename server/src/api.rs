@@ -68,6 +68,8 @@ pub struct AppState {
     pub token_cache: Arc<DashMap<String, (Uuid, String, Instant)>>,
     /// Cached public key PEM from the auth hub (Community mode).
     pub hub_public_key: Arc<RwLock<Option<Vec<u8>>>>,
+    /// Voice channel participants: channel_id → list of VoiceParticipant
+    pub voice_states: Arc<DashMap<Uuid, Vec<VoiceParticipant>>>,
 }
 
 /// Duration to cache validated tokens (60 seconds).
@@ -89,6 +91,7 @@ impl AppState {
                 .unwrap_or_default(),
             token_cache: Arc::new(DashMap::new()),
             hub_public_key: Arc::new(RwLock::new(None)),
+            voice_states: Arc::new(DashMap::new()),
         }
     }
 
@@ -325,7 +328,12 @@ pub fn build_router(state: AppState) -> Router {
             .route("/ws", get(ws_upgrade))
             // Avatars
             .route("/api/users/@me/avatar", put(upload_avatar))
-            .route("/api/avatars/:user_id/:hash", get(get_avatar));
+            .route("/api/avatars/:user_id/:hash", get(get_avatar))
+            // Voice signaling
+            .route("/api/voice/:channel_id/join", post(voice_join))
+            .route("/api/voice/:channel_id/leave", post(voice_leave))
+            .route("/api/voice/:channel_id/state", axum::routing::patch(voice_update_state))
+            .route("/api/voice/:channel_id/participants", get(voice_participants));
     }
 
     router
@@ -1281,6 +1289,9 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
 
     tracing::info!("WebSocket disconnected: {}", user_id);
 
+    // Remove user from any voice channels they were in
+    broadcast_voice_leave(&state, user_id).await;
+
     // Set offline status
     state.presence.set_offline(&user_id);
     
@@ -1297,6 +1308,209 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
     
     for channel_id in &subscribed_channels {
         state.broadcast_to_channel(channel_id, &presence_update);
+    }
+}
+
+// ─── Voice Handlers ─────────────────────────────────────────────────────────
+
+#[derive(Debug, Deserialize)]
+struct VoiceStateBody {
+    muted: Option<bool>,
+    deafened: Option<bool>,
+}
+
+/// POST /api/voice/:channel_id/join
+async fn voice_join(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(channel_id): Path<Uuid>,
+) -> AppResult<Json<Vec<VoiceParticipant>>> {
+    let user_id = auth.user_id;
+
+    // Remove user from any other voice channel first (one channel at a time)
+    let mut old_channels = Vec::new();
+    for entry in state.voice_states.iter() {
+        if entry.value().iter().any(|p| p.user_id == user_id) {
+            old_channels.push(*entry.key());
+        }
+    }
+    for old_ch in &old_channels {
+        if let Some(mut participants) = state.voice_states.get_mut(old_ch) {
+            participants.retain(|p| p.user_id != user_id);
+        }
+        // Broadcast leave for old channel
+        let leave_event = WsEvent::VoiceStateUpdate {
+            channel_id: *old_ch,
+            user_id,
+            joined: false,
+            muted: false,
+            deafened: false,
+            user: None,
+        };
+        state.broadcast_to_channel(old_ch, &leave_event);
+    }
+
+    // Look up user info
+    let user_public = if let Ok(Some(user)) = db::users::find_by_id(&state.db, user_id).await {
+        Some(UserPublic::from(user))
+    } else {
+        None
+    };
+
+    let participant = VoiceParticipant {
+        user_id,
+        channel_id,
+        muted: false,
+        deafened: false,
+        user: user_public.clone(),
+    };
+
+    state
+        .voice_states
+        .entry(channel_id)
+        .or_default()
+        .push(participant);
+
+    // Broadcast join
+    let event = WsEvent::VoiceStateUpdate {
+        channel_id,
+        user_id,
+        joined: true,
+        muted: false,
+        deafened: false,
+        user: user_public,
+    };
+    state.broadcast_to_channel(&channel_id, &event);
+
+    // Return current participant list
+    let participants = state
+        .voice_states
+        .get(&channel_id)
+        .map(|v| v.value().clone())
+        .unwrap_or_default();
+
+    Ok(Json(participants))
+}
+
+/// POST /api/voice/:channel_id/leave
+async fn voice_leave(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(channel_id): Path<Uuid>,
+) -> AppResult<StatusCode> {
+    let user_id = auth.user_id;
+
+    if let Some(mut participants) = state.voice_states.get_mut(&channel_id) {
+        participants.retain(|p| p.user_id != user_id);
+        // Clean up empty channels
+        if participants.is_empty() {
+            drop(participants);
+            state.voice_states.remove(&channel_id);
+        }
+    }
+
+    let event = WsEvent::VoiceStateUpdate {
+        channel_id,
+        user_id,
+        joined: false,
+        muted: false,
+        deafened: false,
+        user: None,
+    };
+    state.broadcast_to_channel(&channel_id, &event);
+
+    Ok(StatusCode::OK)
+}
+
+/// PATCH /api/voice/:channel_id/state
+async fn voice_update_state(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(channel_id): Path<Uuid>,
+    Json(body): Json<VoiceStateBody>,
+) -> AppResult<StatusCode> {
+    let user_id = auth.user_id;
+    let mut muted = false;
+    let mut deafened = false;
+
+    if let Some(mut participants) = state.voice_states.get_mut(&channel_id) {
+        if let Some(p) = participants.iter_mut().find(|p| p.user_id == user_id) {
+            if let Some(m) = body.muted {
+                p.muted = m;
+            }
+            if let Some(d) = body.deafened {
+                p.deafened = d;
+            }
+            muted = p.muted;
+            deafened = p.deafened;
+        } else {
+            return Err(AppError::NotFound("Not in voice channel".to_string()));
+        }
+    } else {
+        return Err(AppError::NotFound("Not in voice channel".to_string()));
+    }
+
+    let user_public = if let Ok(Some(user)) = db::users::find_by_id(&state.db, user_id).await {
+        Some(UserPublic::from(user))
+    } else {
+        None
+    };
+
+    let event = WsEvent::VoiceStateUpdate {
+        channel_id,
+        user_id,
+        joined: true,
+        muted,
+        deafened,
+        user: user_public,
+    };
+    state.broadcast_to_channel(&channel_id, &event);
+
+    Ok(StatusCode::OK)
+}
+
+/// GET /api/voice/:channel_id/participants
+async fn voice_participants(
+    State(state): State<AppState>,
+    _auth: AuthUser,
+    Path(channel_id): Path<Uuid>,
+) -> Json<Vec<VoiceParticipant>> {
+    let participants = state
+        .voice_states
+        .get(&channel_id)
+        .map(|v| v.value().clone())
+        .unwrap_or_default();
+    Json(participants)
+}
+
+/// Remove a user from all voice channels and broadcast leave events.
+/// Called on WebSocket disconnect.
+async fn broadcast_voice_leave(state: &AppState, user_id: Uuid) {
+    let mut channels_to_leave = Vec::new();
+    for entry in state.voice_states.iter() {
+        if entry.value().iter().any(|p| p.user_id == user_id) {
+            channels_to_leave.push(*entry.key());
+        }
+    }
+
+    for channel_id in channels_to_leave {
+        if let Some(mut participants) = state.voice_states.get_mut(&channel_id) {
+            participants.retain(|p| p.user_id != user_id);
+            if participants.is_empty() {
+                drop(participants);
+                state.voice_states.remove(&channel_id);
+            }
+        }
+
+        let event = WsEvent::VoiceStateUpdate {
+            channel_id,
+            user_id,
+            joined: false,
+            muted: false,
+            deafened: false,
+            user: None,
+        };
+        state.broadcast_to_channel(&channel_id, &event);
     }
 }
 
