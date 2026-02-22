@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'api_service.dart';
 import 'socket_service.dart';
+import 'connection_manager.dart';
+import 'auth_provider.dart';
 
 // ─── Models ─────────────────────────────────────────────────────────────
 
@@ -84,16 +86,31 @@ class VoiceState {
 
 class VoiceNotifier extends StateNotifier<VoiceState> {
   final ApiService _api;
-  final SocketService _socket;
-  StreamSubscription? _sub;
+  final SocketService _primarySocket;
+  final ConnectionManager _connMgr;
+  final String? _currentUserId;
+  final List<StreamSubscription> _subs = [];
 
-  VoiceNotifier(this._api, this._socket) : super(const VoiceState()) {
-    _sub = _socket.events.listen(_handleEvent);
+  VoiceNotifier(
+      this._api, this._primarySocket, this._connMgr, this._currentUserId)
+      : super(const VoiceState()) {
+    // Listen to the primary (auth hub / standalone) socket
+    _subs.add(_primarySocket.events.listen(_handleEvent));
+
+    // Also listen to all community server sockets
+    for (final host in _connMgr.hosts) {
+      final socket = _connMgr.getSocketForHost(host.url);
+      if (socket != null && socket != _primarySocket) {
+        _subs.add(socket.events.listen(_handleEvent));
+      }
+    }
   }
 
   @override
   void dispose() {
-    _sub?.cancel();
+    for (final sub in _subs) {
+      sub.cancel();
+    }
     super.dispose();
   }
 
@@ -141,7 +158,20 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       }
     }
 
-    state = state.copyWith(participants: newParticipants);
+    // If the server sent a leave event for the current user (e.g. on WS
+    // disconnect), clear our local voice state so the UI doesn't keep
+    // showing "Voice Connected".
+    final isCurrentUser = _currentUserId != null && userId == _currentUserId;
+    if (!joined && isCurrentUser && state.currentChannelId == channelId) {
+      state = state.copyWith(
+        clearChannel: true,
+        muted: false,
+        deafened: false,
+        participants: newParticipants,
+      );
+    } else {
+      state = state.copyWith(participants: newParticipants);
+    }
   }
 
   /// Join a voice channel (or toggle off if already in the same channel).
@@ -211,15 +241,20 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     final channelId = state.currentChannelId;
     if (channelId == null) return;
 
-    final newDeafened = !state.deafened;
-    final newMuted = newDeafened ? true : state.muted;
+    // Capture old state for revert on failure
+    final oldMuted = state.muted;
+    final oldDeafened = state.deafened;
+
+    final newDeafened = !oldDeafened;
+    final newMuted = newDeafened ? true : oldMuted;
     state = state.copyWith(deafened: newDeafened, muted: newMuted);
 
     try {
       await _api.updateVoiceState(channelId,
           deafened: newDeafened, muted: newMuted);
     } catch (e) {
-      state = state.copyWith(deafened: !newDeafened, muted: !newMuted);
+      // Revert to the prior state, not an inverted state
+      state = state.copyWith(deafened: oldDeafened, muted: oldMuted);
       debugPrint('Failed to update deafen: $e');
     }
   }
@@ -230,5 +265,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 final voiceProvider = StateNotifierProvider<VoiceNotifier, VoiceState>((ref) {
   final api = ref.watch(apiServiceProvider);
   final socket = ref.watch(socketServiceProvider);
-  return VoiceNotifier(api, socket);
+  final connMgr = ref.read(connectionManagerProvider);
+  final userId = ref.watch(authProvider).user?.id;
+  return VoiceNotifier(api, socket, connMgr, userId);
 });

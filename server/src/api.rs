@@ -1280,17 +1280,18 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
 
     state.ws_sessions.remove(&user_id);
 
+    tracing::info!("WebSocket disconnected: {}", user_id);
+
+    // Remove user from any voice channels BEFORE unsubscribing from channels,
+    // so that broadcast_to_channel can still reach other subscribers.
+    broadcast_voice_leave(&state, user_id).await;
+
     // Unsubscribe from channels
     for channel_id in &subscribed_channels {
         if let Some(mut subs) = state.channel_subs.get_mut(channel_id) {
             subs.retain(|&id| id != user_id);
         }
     }
-
-    tracing::info!("WebSocket disconnected: {}", user_id);
-
-    // Remove user from any voice channels they were in
-    broadcast_voice_leave(&state, user_id).await;
 
     // Set offline status
     state.presence.set_offline(&user_id);
@@ -1365,10 +1366,16 @@ async fn voice_join(
         user: user_public.clone(),
     };
 
+    // Deduplicate: remove any existing entry for this user before adding
     state
         .voice_states
         .entry(channel_id)
         .or_default()
+        .retain(|p| p.user_id != user_id);
+    state
+        .voice_states
+        .get_mut(&channel_id)
+        .unwrap()
         .push(participant);
 
     // Broadcast join

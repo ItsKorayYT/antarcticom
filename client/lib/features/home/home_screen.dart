@@ -608,11 +608,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header: "Voice Connected"
-          Row(
+          const Row(
             children: [
               Icon(Icons.signal_cellular_alt,
                   size: 14, color: AntarcticomTheme.online),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Expanded(
                 child: Text(
                   'Voice Connected',
