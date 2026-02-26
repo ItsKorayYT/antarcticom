@@ -63,14 +63,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               transitionsBuilder:
                   (context, animation, secondaryAnimation, child) {
-                // Slide from Left (-1.0, 0.0) to (0.0, 0.0)
-                const begin = Offset(-1.0, 0.0);
-                const end = Offset.zero;
-                const curve = Curves.easeInOut;
-                var tween = Tween(begin: begin, end: end)
-                    .chain(CurveTween(curve: curve));
-                return SlideTransition(
-                    position: animation.drive(tween), child: child);
+                return FadeTransition(opacity: animation, child: child);
               },
             ),
           ),

@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 
 import 'api_service.dart';
 import 'socket_service.dart';
 import 'connection_manager.dart';
 import 'auth_provider.dart';
+import 'settings_provider.dart';
 
 // ─── Models ─────────────────────────────────────────────────────────────
 
@@ -82,6 +84,24 @@ class VoiceState {
       participants[channelId] ?? const [];
 }
 
+// ─── WebRTC Configuration ───────────────────────────────────────────────
+
+const Map<String, dynamic> _rtcConfig = {
+  'iceServers': [
+    {'urls': 'stun:stun.l.google.com:19302'},
+    {'urls': 'stun:stun1.l.google.com:19302'},
+  ],
+};
+
+const Map<String, dynamic> _mediaConstraints = {
+  'audio': {
+    'echoCancellation': true,
+    'noiseSuppression': true,
+    'autoGainControl': true,
+  },
+  'video': false,
+};
+
 // ─── Notifier ───────────────────────────────────────────────────────────
 
 class VoiceNotifier extends StateNotifier<VoiceState> {
@@ -89,10 +109,22 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   final SocketService _primarySocket;
   final ConnectionManager _connMgr;
   final String? _currentUserId;
+  final AppSettings _settings;
   final List<StreamSubscription> _subs = [];
 
-  VoiceNotifier(
-      this._api, this._primarySocket, this._connMgr, this._currentUserId)
+  /// Local audio stream from the microphone.
+  MediaStream? _localStream;
+
+  /// Single peer connection to the SFU (Server).
+  RTCPeerConnection? _serverConnection;
+
+  /// Remote audio streams for playback, keyed by track ID.
+  final Map<String, MediaStream> _remoteStreams = {};
+
+  static const String serverId = '00000000-0000-0000-0000-000000000000';
+
+  VoiceNotifier(this._api, this._primarySocket, this._connMgr,
+      this._currentUserId, this._settings)
       : super(const VoiceState()) {
     // Listen to the primary (auth hub / standalone) socket
     _subs.add(_primarySocket.events.listen(_handleEvent));
@@ -108,6 +140,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
   @override
   void dispose() {
+    _cleanupWebRTC();
     for (final sub in _subs) {
       sub.cancel();
     }
@@ -117,10 +150,209 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   void _handleEvent(WsEvent event) {
     if (event.type == 'VoiceStateUpdate' && event.data != null) {
       _handleVoiceUpdate(event.data!);
+    } else if (event.type == 'WebRTCSignal' && event.data != null) {
+      _handleWebRTCSignal(event.data!);
     }
   }
 
-  /// Handle a VoiceStateUpdate event from the WebSocket.
+  // ─── WebRTC Signal Handling ─────────────────────────────────────────
+
+  Future<void> _handleWebRTCSignal(Map<String, dynamic> data) async {
+    final fromUserId = data['from_user_id'] as String?;
+    final channelId = data['channel_id'] as String?;
+    final signalType = data['signal_type'] as String?;
+    final payload = data['payload'];
+
+    if (fromUserId == null ||
+        channelId == null ||
+        signalType == null ||
+        payload == null) {
+      return;
+    }
+    if (channelId != state.currentChannelId) {
+      return; // ignore signals for other channels
+    }
+
+    // Only handle signals from the server (serverId or nil)
+    if (fromUserId != serverId &&
+        fromUserId != '00000000-0000-0000-0000-000000000000') {
+      return;
+    }
+
+    debugPrint('WebRTC SFU signal from server: $signalType');
+
+    switch (signalType) {
+      case 'answer':
+        await _handleAnswer(payload);
+        break;
+      case 'ice':
+        await _handleIceCandidate(payload);
+        break;
+    }
+  }
+
+  Future<void> _handleAnswer(dynamic payload) async {
+    if (_serverConnection == null) return;
+
+    // Server payload is just the SDP string in our current implementation
+    final String sdp = payload is String ? payload : payload['sdp'];
+    await _serverConnection!
+        .setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
+  }
+
+  Future<void> _handleIceCandidate(dynamic payload) async {
+    if (_serverConnection == null) return;
+
+    final String? candidateStr =
+        payload is String ? payload : payload['candidate'];
+    if (candidateStr != null) {
+      await _serverConnection!
+          .addCandidate(RTCIceCandidate(candidateStr, null, null));
+    }
+  }
+
+  // ─── Peer Connection Management ─────────────────────────────────────
+
+  Future<RTCPeerConnection> _getOrCreateServerConnection() async {
+    if (_serverConnection != null) return _serverConnection!;
+
+    final pc = await createPeerConnection(_rtcConfig);
+    _serverConnection = pc;
+
+    // Handle incoming remote tracks (from other users, forwarded by SFU)
+    pc.onTrack = (RTCTrackEvent event) {
+      debugPrint('Remote track received from SFU: ${event.track.id}');
+      if (event.streams.isNotEmpty) {
+        _remoteStreams[event.track.id!] = event.streams[0];
+        // If deafened, mute all remote audio
+        if (state.deafened) {
+          _muteRemoteStreams(true);
+        }
+      }
+    };
+
+    // Handle ICE candidates — send to server
+    pc.onIceCandidate = (RTCIceCandidate candidate) {
+      if (state.currentChannelId != null) {
+        _sendSignal(
+          toUserId: serverId,
+          channelId: state.currentChannelId!,
+          signalType: 'ice',
+          payload: candidate.candidate!,
+        );
+      }
+    };
+
+    pc.onIceConnectionState = (RTCIceConnectionState iceState) {
+      debugPrint('ICE state with SFU: $iceState');
+    };
+
+    return pc;
+  }
+
+  Future<void> _initiateSfuCall(String channelId) async {
+    final pc = await _getOrCreateServerConnection();
+
+    // Add local audio tracks
+    if (_localStream != null) {
+      for (final track in _localStream!.getAudioTracks()) {
+        await pc.addTrack(track, _localStream!);
+      }
+    }
+
+    final offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    _sendSignal(
+      toUserId: serverId,
+      channelId: channelId,
+      signalType: 'offer',
+      payload: offer.sdp!,
+    );
+  }
+
+  void _sendSignal({
+    required String toUserId,
+    required String channelId,
+    required String signalType,
+    required dynamic payload,
+  }) {
+    _primarySocket.sendWebRTCSignal(
+      toUserId: toUserId,
+      channelId: channelId,
+      signalType: signalType,
+      payload: payload,
+    );
+
+    for (final host in _connMgr.hosts) {
+      final socket = _connMgr.getSocketForHost(host.url);
+      if (socket != null && socket != _primarySocket) {
+        socket.sendWebRTCSignal(
+          toUserId: toUserId,
+          channelId: channelId,
+          signalType: signalType,
+          payload: payload,
+        );
+      }
+    }
+  }
+
+  Future<void> _cleanupWebRTC() async {
+    await _serverConnection?.close();
+    _serverConnection = null;
+    _remoteStreams.clear();
+
+    if (_localStream != null) {
+      for (final track in _localStream!.getTracks()) {
+        await track.stop();
+      }
+      await _localStream!.dispose();
+      _localStream = null;
+    }
+  }
+
+  Future<void> _startLocalAudio() async {
+    try {
+      final constraints = Map<String, dynamic>.from(_mediaConstraints);
+      if (_settings.selectedInputDeviceId != null) {
+        final audioConstraints = constraints['audio'];
+        if (audioConstraints is Map) {
+          constraints['audio'] = {
+            ...audioConstraints,
+            'deviceId': {'exact': _settings.selectedInputDeviceId},
+          };
+        } else {
+          constraints['audio'] = {
+            'deviceId': {'exact': _settings.selectedInputDeviceId},
+          };
+        }
+      }
+
+      _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      debugPrint('Local audio stream started: ${_localStream!.id}');
+    } catch (e) {
+      debugPrint('Failed to get microphone: $e');
+    }
+  }
+
+  void _muteLocalAudio(bool mute) {
+    if (_localStream != null) {
+      for (final track in _localStream!.getAudioTracks()) {
+        track.enabled = !mute;
+      }
+    }
+  }
+
+  void _muteRemoteStreams(bool mute) {
+    for (final stream in _remoteStreams.values) {
+      for (final track in stream.getAudioTracks()) {
+        track.enabled = !mute;
+      }
+    }
+  }
+
+  // ─── Voice State (Signaling) Updates ─────────────────────────────────
+
   void _handleVoiceUpdate(Map<String, dynamic> data) {
     final channelId = data['channel_id'] as String?;
     final userId = data['user_id'] as String?;
@@ -147,7 +379,6 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       list.add(participant);
       newParticipants[channelId] = list;
     } else {
-      // Remove participant
       final list =
           List<VoiceParticipant>.from(newParticipants[channelId] ?? []);
       list.removeWhere((p) => p.userId == userId);
@@ -158,11 +389,9 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       }
     }
 
-    // If the server sent a leave event for the current user (e.g. on WS
-    // disconnect), clear our local voice state so the UI doesn't keep
-    // showing "Voice Connected".
     final isCurrentUser = _currentUserId != null && userId == _currentUserId;
     if (!joined && isCurrentUser && state.currentChannelId == channelId) {
+      _cleanupWebRTC();
       state = state.copyWith(
         clearChannel: true,
         muted: false,
@@ -174,7 +403,6 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
   }
 
-  /// Join a voice channel (or toggle off if already in the same channel).
   Future<void> joinChannel(String channelId) async {
     if (state.currentChannelId == channelId) {
       await leaveChannel();
@@ -182,6 +410,8 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
 
     try {
+      await _startLocalAudio();
+
       final data = await _api.joinVoiceChannel(channelId);
       final participants = data
           .map((e) => VoiceParticipant.fromJson(e as Map<String, dynamic>))
@@ -197,12 +427,15 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
         deafened: false,
         participants: newParticipants,
       );
+
+      // In SFU mode, we only initiate ONE call to the server
+      await _initiateSfuCall(channelId);
     } catch (e) {
       debugPrint('Failed to join voice channel: $e');
+      await _cleanupWebRTC();
     }
   }
 
-  /// Leave the current voice channel.
   Future<void> leaveChannel() async {
     final channelId = state.currentChannelId;
     if (channelId == null) return;
@@ -213,6 +446,8 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       debugPrint('Failed to leave voice channel: $e');
     }
 
+    await _cleanupWebRTC();
+
     state = state.copyWith(
       clearChannel: true,
       muted: false,
@@ -220,28 +455,27 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     );
   }
 
-  /// Toggle mute state.
   Future<void> toggleMute() async {
     final channelId = state.currentChannelId;
     if (channelId == null) return;
 
     final newMuted = !state.muted;
     state = state.copyWith(muted: newMuted);
+    _muteLocalAudio(newMuted);
 
     try {
       await _api.updateVoiceState(channelId, muted: newMuted);
     } catch (e) {
       state = state.copyWith(muted: !newMuted);
+      _muteLocalAudio(!newMuted);
       debugPrint('Failed to update mute: $e');
     }
   }
 
-  /// Toggle deafen state.
   Future<void> toggleDeafen() async {
     final channelId = state.currentChannelId;
     if (channelId == null) return;
 
-    // Capture old state for revert on failure
     final oldMuted = state.muted;
     final oldDeafened = state.deafened;
 
@@ -249,12 +483,16 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     final newMuted = newDeafened ? true : oldMuted;
     state = state.copyWith(deafened: newDeafened, muted: newMuted);
 
+    _muteLocalAudio(newMuted);
+    _muteRemoteStreams(newDeafened);
+
     try {
       await _api.updateVoiceState(channelId,
           deafened: newDeafened, muted: newMuted);
     } catch (e) {
-      // Revert to the prior state, not an inverted state
       state = state.copyWith(deafened: oldDeafened, muted: oldMuted);
+      _muteLocalAudio(oldMuted);
+      _muteRemoteStreams(oldDeafened);
       debugPrint('Failed to update deafen: $e');
     }
   }
@@ -267,5 +505,6 @@ final voiceProvider = StateNotifierProvider<VoiceNotifier, VoiceState>((ref) {
   final socket = ref.watch(socketServiceProvider);
   final connMgr = ref.read(connectionManagerProvider);
   final userId = ref.watch(authProvider).user?.id;
-  return VoiceNotifier(api, socket, connMgr, userId);
+  final settings = ref.watch(settingsProvider);
+  return VoiceNotifier(api, socket, connMgr, userId, settings);
 });

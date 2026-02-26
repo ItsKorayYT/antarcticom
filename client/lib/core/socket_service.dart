@@ -170,6 +170,25 @@ class SocketService {
     _reconnectAttempts = 0;
     _cleanup();
   }
+
+  /// Send a WebRTC signaling message to another user via the server relay.
+  void sendWebRTCSignal({
+    required String toUserId,
+    required String channelId,
+    required String signalType, // "offer", "answer", "ice"
+    required dynamic payload,
+  }) {
+    send({
+      'type': 'WebRTCSignal',
+      'data': {
+        'from_user_id': '', // server stamps this
+        'to_user_id': toUserId,
+        'channel_id': channelId,
+        'signal_type': signalType,
+        'payload': payload,
+      },
+    });
+  }
 }
 
 final socketServiceProvider = Provider<SocketService>((ref) {

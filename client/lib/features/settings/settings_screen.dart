@@ -10,6 +10,7 @@ import '../../core/theme.dart';
 import '../../core/settings_provider.dart';
 import '../../core/auth_provider.dart';
 import '../../core/api_service.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../home/background_manager.dart';
 import '../home/rainbow_builder.dart';
 
@@ -202,6 +203,24 @@ class SettingsScreen extends ConsumerWidget {
                                 notifier.setShootingStarFrequency(val),
                           ),
                         const SizedBox(height: AntarcticomTheme.spacingMd),
+                        const Divider(color: AntarcticomTheme.bgTertiary),
+                        const SizedBox(height: AntarcticomTheme.spacingMd),
+
+                        Text(
+                          'Voice & Audio',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineMedium
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: AntarcticomTheme.textPrimary,
+                              ),
+                        ),
+                        const SizedBox(height: AntarcticomTheme.spacingLg),
+                        const _AudioDeviceSelectors(),
+                        const SizedBox(height: AntarcticomTheme.spacingLg),
+                        const Divider(color: AntarcticomTheme.bgTertiary),
+                        const SizedBox(height: AntarcticomTheme.spacingLg),
 
                         // ─── Layout ─────────────────────────────────────────
                         const _SectionHeader('Layout'),
@@ -683,6 +702,127 @@ class _CropAvatarDialogState extends State<_CropAvatarDialog> {
           },
           child: const Text('Crop',
               style: TextStyle(color: AntarcticomTheme.accentPrimary)),
+        ),
+      ],
+    );
+  }
+}
+
+class _AudioDeviceSelectors extends ConsumerStatefulWidget {
+  const _AudioDeviceSelectors();
+
+  @override
+  ConsumerState<_AudioDeviceSelectors> createState() =>
+      _AudioDeviceSelectorsState();
+}
+
+class _AudioDeviceSelectorsState extends ConsumerState<_AudioDeviceSelectors> {
+  List<MediaDeviceInfo> _devices = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDevices();
+  }
+
+  Future<void> _loadDevices() async {
+    setState(() => _isLoading = true);
+    try {
+      final devices = await navigator.mediaDevices.enumerateDevices();
+      if (mounted) {
+        setState(() {
+          _devices = devices;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error enumerating devices: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+          child: CircularProgressIndicator(
+        color: AntarcticomTheme.accentPrimary,
+      ));
+    }
+
+    final settings = ref.watch(settingsProvider);
+    final notifier = ref.read(settingsProvider.notifier);
+
+    final inputs = _devices.where((d) => d.kind == 'audioinput').toList();
+    final outputs = _devices.where((d) => d.kind == 'audiooutput').toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionHeader('Input Device'),
+        DropdownButtonFormField<String?>(
+          value: settings.selectedInputDeviceId,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            filled: true,
+            fillColor: Colors.black26,
+          ),
+          dropdownColor: AntarcticomTheme.bgTertiary,
+          items: [
+            const DropdownMenuItem(
+              value: null,
+              child:
+                  Text('Default Device', style: TextStyle(color: Colors.white)),
+            ),
+            ...inputs.map((d) => DropdownMenuItem(
+                  value: d.deviceId,
+                  child: Text(
+                    d.label.isNotEmpty ? d.label : 'Microphone (${d.deviceId})',
+                    style: const TextStyle(color: Colors.white),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )),
+          ],
+          onChanged: (val) => notifier.setInputDevice(val),
+        ),
+        const SizedBox(height: AntarcticomTheme.spacingLg),
+        const _SectionHeader('Output Device'),
+        DropdownButtonFormField<String?>(
+          value: settings.selectedOutputDeviceId,
+          decoration: const InputDecoration(
+            border: OutlineInputBorder(),
+            filled: true,
+            fillColor: Colors.black26,
+          ),
+          dropdownColor: AntarcticomTheme.bgTertiary,
+          items: [
+            const DropdownMenuItem(
+              value: null,
+              child:
+                  Text('Default Device', style: TextStyle(color: Colors.white)),
+            ),
+            ...outputs.map((d) => DropdownMenuItem(
+                  value: d.deviceId,
+                  child: Text(
+                    d.label.isNotEmpty ? d.label : 'Speaker (${d.deviceId})',
+                    style: const TextStyle(color: Colors.white),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                )),
+          ],
+          onChanged: (val) => notifier.setOutputDevice(val),
+        ),
+        const SizedBox(height: AntarcticomTheme.spacingMd),
+        TextButton.icon(
+          onPressed: _loadDevices,
+          icon: const Icon(Icons.refresh, size: 16),
+          label: const Text('Refresh Devices'),
+          style: TextButton.styleFrom(
+            foregroundColor: AntarcticomTheme.accentPrimary,
+          ),
         ),
       ],
     );

@@ -335,7 +335,15 @@ pub enum WsEvent {
         deafened: bool,
         user: Option<UserPublic>,
     },
-    VoiceServerUpdate { endpoint: String, token: String },
+
+    // WebRTC signaling relay (peer-to-peer audio)
+    WebRTCSignal {
+        from_user_id: Uuid,
+        to_user_id: Uuid,
+        channel_id: Uuid,
+        signal_type: String,  // "offer", "answer", "ice"
+        payload: serde_json::Value,
+    },
 
     // Server
     ServerCreate(Server),

@@ -1,7 +1,5 @@
 #[allow(unused_imports)]
 use std::collections::HashMap;
-use std::sync::Arc;
-use std::path::PathBuf;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
@@ -70,6 +68,8 @@ pub struct AppState {
     pub hub_public_key: Arc<RwLock<Option<Vec<u8>>>>,
     /// Voice channel participants: channel_id → list of VoiceParticipant
     pub voice_states: Arc<DashMap<Uuid, Vec<VoiceParticipant>>>,
+    /// SFU server for WebRTC relay
+    pub sfu: Arc<crate::voice::SfuServer>,
 }
 
 /// Duration to cache validated tokens (60 seconds).
@@ -92,6 +92,7 @@ impl AppState {
             token_cache: Arc::new(DashMap::new()),
             hub_public_key: Arc::new(RwLock::new(None)),
             voice_states: Arc::new(DashMap::new()),
+            sfu: Arc::new(crate::voice::SfuServer::new().expect("Failed to initialize SFU")),
         }
     }
 
@@ -1264,10 +1265,48 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
         }
     });
 
+    let state_for_recv = state.clone();
     let mut receive_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = receiver.next().await {
-            if let WsMessage::Close(_) = msg {
-                break;
+            match msg {
+                WsMessage::Close(_) => break,
+                WsMessage::Text(text) => {
+                    // Parse incoming messages and relay WebRTC signals
+                    if let Ok(event) = serde_json::from_str::<WsEvent>(&text) {
+                        if let WsEvent::WebRTCSignal { to_user_id, channel_id, signal_type, payload, .. } = event {
+                            
+                            // If to_user_id is nil, it's for the SFU (Server)
+                            if to_user_id.is_nil() {
+                                if signal_type == "offer" {
+                                    if let Some(sdp) = payload.as_str() {
+                                        match state_for_recv.sfu.handle_offer(channel_id, user_id, sdp.to_string()).await {
+                                            Ok(answer_sdp) => {
+                                                let answer = WsEvent::WebRTCSignal {
+                                                    from_user_id: Uuid::nil(),
+                                                    to_user_id: user_id,
+                                                    channel_id,
+                                                    signal_type: "answer".to_string(),
+                                                    payload: serde_json::Value::String(answer_sdp),
+                                                };
+                                                state_for_recv.broadcast_to_user(&user_id, &answer);
+                                            }
+                                            Err(e) => tracing::error!("SFU error handling offer: {}", e),
+                                        }
+                                    }
+                                } else if signal_type == "ice" {
+                                    if let Some(candidate) = payload.as_str() {
+                                        if let Err(e) = state_for_recv.sfu.handle_ice_candidate(channel_id, user_id, candidate.to_string()).await {
+                                            tracing::error!("SFU error handling ICE candidate: {}", e);
+                                        }
+                                    }
+                                }
+                            } else {
+                                tracing::warn!("Ignoring P2P WebRTC signal from user {}: Legacy P2P is disabled", user_id);
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         }
     });
@@ -1281,6 +1320,13 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
     state.ws_sessions.remove(&user_id);
 
     tracing::info!("WebSocket disconnected: {}", user_id);
+
+    // SFU Cleanup: Remove user from any active SFU channels
+    let sfu = state.sfu.clone();
+    for entry in sfu.channels.iter() {
+        let channel_id = *entry.key();
+        sfu.leave_channel(channel_id, user_id).await;
+    }
 
     // Remove user from any voice channels BEFORE unsubscribing from channels,
     // so that broadcast_to_channel can still reach other subscribers.

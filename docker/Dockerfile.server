@@ -9,12 +9,10 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     libopus-dev \
-    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency manifests first for Docker layer caching
 COPY server/Cargo.toml server/Cargo.lock* ./server/
-COPY proto/ ./proto/
 
 # Create a dummy main.rs to build only dependencies
 RUN mkdir -p server/src && echo "fn main() {}" > server/src/main.rs

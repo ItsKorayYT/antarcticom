@@ -1,7 +1,4 @@
-use anyhow::Result;
-use sqlx::PgPool;
 use tracing_subscriber::{fmt, EnvFilter};
-use uuid::Uuid;
 
 mod api;
 mod auth;
@@ -15,7 +12,6 @@ mod presence;
 mod voice;
 
 use crate::config::AppConfig;
-use crate::models::ChannelType;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -75,18 +71,7 @@ async fn main() -> Result<()> {
     // Build application state
     let state = api::AppState::new(db_pool, redis_client, config.clone());
 
-    // Start voice server (QUIC) in background — only for community / standalone
-    let voice_handle = if config.is_community() {
-        let voice_config = config.voice.clone();
-        Some(tokio::spawn(async move {
-            if let Err(e) = voice::start_voice_server(&voice_config).await {
-                tracing::error!("Voice server error: {}", e);
-            }
-        }))
-    } else {
-        tracing::info!("Auth hub mode — voice server disabled");
-        None
-    };
+    // Voice server (SFU) is now integrated into the AppState and handled via WebSockets.
 
     // Build HTTP + WebSocket router
     let app = api::build_router(state);
@@ -100,9 +85,6 @@ async fn main() -> Result<()> {
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 
-    if let Some(handle) = voice_handle {
-        handle.abort();
-    }
     tracing::info!("Antarcticom server stopped gracefully");
     Ok(())
 }

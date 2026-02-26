@@ -34,6 +34,8 @@ class AppSettings {
     this.showOwls = true,
     this.showShootingStars = false,
     this.shootingStarFrequency = 0.5,
+    this.selectedInputDeviceId,
+    this.selectedOutputDeviceId,
   });
 
   final bool rainbowMode;
@@ -45,6 +47,8 @@ class AppSettings {
   final bool showOwls;
   final bool showShootingStars;
   final double shootingStarFrequency; // 0.0 (Rare) to 1.0 (Frequent)
+  final String? selectedInputDeviceId;
+  final String? selectedOutputDeviceId;
 
   AppSettings copyWith({
     double? sidebarOpacity,
@@ -63,6 +67,8 @@ class AppSettings {
     bool? showOwls,
     bool? showShootingStars,
     double? shootingStarFrequency,
+    String? selectedInputDeviceId,
+    String? selectedOutputDeviceId,
   }) {
     return AppSettings(
       sidebarOpacity: sidebarOpacity ?? this.sidebarOpacity,
@@ -82,6 +88,10 @@ class AppSettings {
       showShootingStars: showShootingStars ?? this.showShootingStars,
       shootingStarFrequency:
           shootingStarFrequency ?? this.shootingStarFrequency,
+      selectedInputDeviceId:
+          selectedInputDeviceId ?? this.selectedInputDeviceId,
+      selectedOutputDeviceId:
+          selectedOutputDeviceId ?? this.selectedOutputDeviceId,
     );
   }
 }
@@ -106,6 +116,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   static const _keyShowOwls = 'show_owls';
   static const _keyShowShootingStars = 'show_shooting_stars';
   static const _keyShootingStarFreq = 'shooting_star_freq';
+  static const _keyInputDeviceId = 'input_device_id';
+  static const _keyOutputDeviceId = 'output_device_id';
 
   Future<void> setMoonPosition(double x, double y) async {
     state = state.copyWith(moonX: x, moonY: y);
@@ -145,6 +157,26 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     await prefs.setDouble(_keyShootingStarFreq, value);
   }
 
+  Future<void> setInputDevice(String? id) async {
+    state = state.copyWith(selectedInputDeviceId: id);
+    final prefs = await SharedPreferences.getInstance();
+    if (id == null) {
+      await prefs.remove(_keyInputDeviceId);
+    } else {
+      await prefs.setString(_keyInputDeviceId, id);
+    }
+  }
+
+  Future<void> setOutputDevice(String? id) async {
+    state = state.copyWith(selectedOutputDeviceId: id);
+    final prefs = await SharedPreferences.getInstance();
+    if (id == null) {
+      await prefs.remove(_keyOutputDeviceId);
+    } else {
+      await prefs.setString(_keyOutputDeviceId, id);
+    }
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final sidebarOpacity = prefs.getDouble(_keySidebarOpacity) ?? 0.85;
@@ -165,6 +197,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final owls = prefs.getBool(_keyShowOwls) ?? true;
     final stars = prefs.getBool(_keyShowShootingStars) ?? false;
     final starFreq = prefs.getDouble(_keyShootingStarFreq) ?? 0.5;
+    final inputId = prefs.getString(_keyInputDeviceId);
+    final outputId = prefs.getString(_keyOutputDeviceId);
 
     state = AppSettings(
       sidebarOpacity: sidebarOpacity,
@@ -186,6 +220,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       showOwls: owls,
       showShootingStars: stars,
       shootingStarFrequency: starFreq,
+      selectedInputDeviceId: inputId,
+      selectedOutputDeviceId: outputId,
     );
   }
 

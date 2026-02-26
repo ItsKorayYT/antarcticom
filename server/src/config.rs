@@ -61,8 +61,6 @@ pub struct RedisConfig {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct VoiceConfig {
-    pub host: String,
-    pub port: u16,
     pub max_sessions: u32,
     pub min_bitrate: u32,
     pub max_bitrate: u32,
