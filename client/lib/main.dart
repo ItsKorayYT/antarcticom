@@ -3,17 +3,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme.dart';
 import 'core/router.dart';
 import 'core/settings_provider.dart';
+import 'core/update_service.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const ProviderScope(child: AntarcticomApp()));
 }
 
-class AntarcticomApp extends ConsumerWidget {
+class AntarcticomApp extends ConsumerStatefulWidget {
   const AntarcticomApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AntarcticomApp> createState() => _AntarcticomAppState();
+}
+
+class _AntarcticomAppState extends ConsumerState<AntarcticomApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Check for updates after a short delay so the UI is ready
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        UpdateService.checkForUpdates(context);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     final settings = ref.watch(settingsProvider);
 
