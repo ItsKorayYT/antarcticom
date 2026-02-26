@@ -12,6 +12,7 @@ use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::track::track_local::TrackLocalWriter;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_remote::TrackRemote;
 
@@ -94,7 +95,7 @@ impl SfuServer {
         let my_track_c = user.my_track.clone();
 
         // Handle incoming tracks from this user
-        pc.on_track(Box::new(move |track: Arc<TrackRemote>, _receiver| {
+        pc.on_track(Box::new(move |track: Arc<TrackRemote>, _receiver, _transceiver| {
             let channel = match channel_c.upgrade() {
                 Some(c) => c,
                 None => return Box::pin(async {}),
@@ -129,11 +130,18 @@ impl SfuServer {
                 }
 
                 // Forward RTP packets
-                let mut b = vec![0u8; 1500];
-                while let Ok((n, _)) = track.read(&mut b).await {
-                    if let Err(e) = track_local.write(&b[..n]).await {
-                        tracing::error!("Error writing RTP packet: {}", e);
-                        break;
+                loop {
+                    match track.read_rtp().await {
+                        Ok((rtp_packet, _attributes)) => {
+                            if let Err(e) = track_local.write_rtp(&rtp_packet).await {
+                                tracing::error!("Error writing RTP packet: {}", e);
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("Error reading RTP packet: {}", e);
+                            break;
+                        }
                     }
                 }
             })

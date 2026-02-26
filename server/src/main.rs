@@ -1,4 +1,7 @@
+use anyhow::Result;
+use sqlx::PgPool;
 use tracing_subscriber::{fmt, EnvFilter};
+use uuid::Uuid;
 
 mod api;
 mod auth;
@@ -12,6 +15,7 @@ mod presence;
 mod voice;
 
 use crate::config::AppConfig;
+use crate::models::ChannelType;
 
 #[tokio::main]
 async fn main() -> Result<()> {
