@@ -60,7 +60,20 @@ impl SfuServer {
         user_id: Uuid,
         offer_sdp: String,
     ) -> Result<String> {
-        let config = RTCConfiguration::default();
+        use webrtc::ice_transport::ice_server::RTCIceServer;
+
+        let config = RTCConfiguration {
+            ice_servers: vec![
+                RTCIceServer {
+                    urls: vec![
+                        "stun:stun.l.google.com:19302".to_string(),
+                        "stun:stun1.l.google.com:19302".to_string(),
+                    ],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
         let pc = Arc::new(self.api.new_peer_connection(config).await?);
 
         let channel = self.channels.entry(channel_id).or_insert_with(|| {
@@ -147,14 +160,39 @@ impl SfuServer {
             })
         }));
 
+        // Wait for ICE gathering to complete so the answer SDP contains all candidates.
+        // Register the handler BEFORE setting descriptions to avoid race conditions.
+        let gather_notify = Arc::new(tokio::sync::Notify::new());
+        let gather_notify_c = gather_notify.clone();
+        pc.on_ice_gathering_state_change(Box::new(move |state| {
+            let notify = gather_notify_c.clone();
+            Box::pin(async move {
+                tracing::debug!("SFU ICE gathering state: {:?}", state);
+                if state == webrtc::ice_transport::ice_gatherer_state::RTCIceGathererState::Complete {
+                    notify.notify_one();
+                }
+            })
+        }));
+
         // Set remote description (the offer)
         pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?).await?;
 
         // Create answer
         let answer = pc.create_answer(None).await?;
-        pc.set_local_description(answer.clone()).await?;
+        pc.set_local_description(answer).await?;
 
-        Ok(answer.sdp)
+        // Wait for ICE gathering to complete (timeout after 3 seconds)
+        let _ = tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            gather_notify.notified(),
+        ).await;
+
+        // Return the local description which now includes gathered ICE candidates
+        let local_desc = pc.local_description().await
+            .ok_or_else(|| anyhow::anyhow!("No local description after ICE gathering"))?;
+
+        tracing::info!("SFU answer ready for user {} ({} bytes)", user_id, local_desc.sdp.len());
+        Ok(local_desc.sdp)
     }
 
 

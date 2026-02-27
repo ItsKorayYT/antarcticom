@@ -121,6 +121,9 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   /// Remote audio streams for playback, keyed by track ID.
   final Map<String, MediaStream> _remoteStreams = {};
 
+  /// Audio renderers for remote streams (required on desktop for playback).
+  final Map<String, RTCVideoRenderer> _audioRenderers = {};
+
   static const String serverId = '00000000-0000-0000-0000-000000000000';
 
   VoiceNotifier(this._api, this._primarySocket, this._connMgr,
@@ -220,14 +223,31 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     _serverConnection = pc;
 
     // Handle incoming remote tracks (from other users, forwarded by SFU)
-    pc.onTrack = (RTCTrackEvent event) {
-      debugPrint('Remote track received from SFU: ${event.track.id}');
+    pc.onTrack = (RTCTrackEvent event) async {
+      debugPrint('Remote track received from SFU: ${event.track.id}, '
+          'kind: ${event.track.kind}, streams: ${event.streams.length}');
+
       if (event.streams.isNotEmpty) {
-        _remoteStreams[event.track.id!] = event.streams[0];
-        // If deafened, mute all remote audio
-        if (state.deafened) {
-          _muteRemoteStreams(true);
+        final stream = event.streams[0];
+        _remoteStreams[event.track.id!] = stream;
+
+        // Create an audio renderer to ensure playback on desktop platforms.
+        // Without this, remote audio may not auto-play on Windows.
+        final renderer = RTCVideoRenderer();
+        await renderer.initialize();
+        renderer.srcObject = stream;
+        _audioRenderers[event.track.id!] = renderer;
+
+        debugPrint('Audio renderer set up for remote track ${event.track.id}, '
+            'audio tracks in stream: ${stream.getAudioTracks().length}');
+
+        // Ensure audio tracks are enabled
+        for (final audioTrack in stream.getAudioTracks()) {
+          audioTrack.enabled = !state.deafened;
         }
+      } else {
+        debugPrint(
+            'WARNING: Remote track ${event.track.id} has no associated streams');
       }
     };
 
@@ -326,6 +346,13 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     await _serverConnection?.close();
     _serverConnection = null;
     _remoteStreams.clear();
+
+    // Dispose audio renderers
+    for (final renderer in _audioRenderers.values) {
+      renderer.srcObject = null;
+      await renderer.dispose();
+    }
+    _audioRenderers.clear();
 
     if (_localStream != null) {
       for (final track in _localStream!.getTracks()) {
