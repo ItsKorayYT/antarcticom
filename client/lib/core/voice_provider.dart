@@ -227,18 +227,29 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       debugPrint('Remote track received from SFU: ${event.track.id}, '
           'kind: ${event.track.kind}, streams: ${event.streams.length}');
 
+      // Only process audio tracks — skip phantom video tracks
+      // that arrive when the SFU has no real audio to forward.
+      if (event.track.kind != 'audio') {
+        debugPrint('Ignoring non-audio track: ${event.track.kind}');
+        return;
+      }
+
       if (event.streams.isNotEmpty) {
         final stream = event.streams[0];
         _remoteStreams[event.track.id!] = stream;
 
         // Create an audio renderer to ensure playback on desktop platforms.
         // Without this, remote audio may not auto-play on Windows.
-        final renderer = RTCVideoRenderer();
-        await renderer.initialize();
-        renderer.srcObject = stream;
-        _audioRenderers[event.track.id!] = renderer;
+        try {
+          final renderer = RTCVideoRenderer();
+          await renderer.initialize();
+          renderer.srcObject = stream;
+          _audioRenderers[event.track.id!] = renderer;
+        } catch (e) {
+          debugPrint('Audio renderer setup warning: $e');
+        }
 
-        debugPrint('Audio renderer set up for remote track ${event.track.id}, '
+        debugPrint('Audio track set up for remote track ${event.track.id}, '
             'audio tracks in stream: ${stream.getAudioTracks().length}');
 
         // Ensure audio tracks are enabled
@@ -353,8 +364,12 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
     // Dispose audio renderers
     for (final renderer in _audioRenderers.values) {
-      renderer.srcObject = null;
-      await renderer.dispose();
+      try {
+        renderer.srcObject = null;
+        await renderer.dispose();
+      } catch (e) {
+        debugPrint('Renderer dispose warning (safe to ignore): $e');
+      }
     }
     _audioRenderers.clear();
 
