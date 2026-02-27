@@ -764,7 +764,7 @@ class _AudioDeviceSelectorsState extends ConsumerState<_AudioDeviceSelectors> {
       children: [
         const _SectionHeader('Input Device'),
         DropdownButtonFormField<String?>(
-          value: settings.selectedInputDeviceId,
+          initialValue: settings.selectedInputDeviceId,
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             filled: true,
@@ -791,7 +791,7 @@ class _AudioDeviceSelectorsState extends ConsumerState<_AudioDeviceSelectors> {
         const SizedBox(height: AntarcticomTheme.spacingLg),
         const _SectionHeader('Output Device'),
         DropdownButtonFormField<String?>(
-          value: settings.selectedOutputDeviceId,
+          initialValue: settings.selectedOutputDeviceId,
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             filled: true,

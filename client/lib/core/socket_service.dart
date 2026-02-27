@@ -181,7 +181,8 @@ class SocketService {
     send({
       'type': 'WebRTCSignal',
       'data': {
-        'from_user_id': '', // server stamps this
+        'from_user_id':
+            '00000000-0000-0000-0000-000000000000', // server stamps real ID
         'to_user_id': toUserId,
         'channel_id': channelId,
         'signal_type': signalType,

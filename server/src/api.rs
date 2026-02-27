@@ -1274,7 +1274,8 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
                 WsMessage::Close(_) => break,
                 WsMessage::Text(text) => {
                     // Parse incoming messages and relay WebRTC signals
-                    if let Ok(event) = serde_json::from_str::<WsEvent>(&text) {
+                    match serde_json::from_str::<WsEvent>(&text) {
+                        Ok(event) => {
                         if let WsEvent::WebRTCSignal { to_user_id, channel_id, signal_type, payload, .. } = event {
                             
                             // If to_user_id is nil, it's for the SFU (Server)
@@ -1305,6 +1306,10 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
                             } else {
                                 tracing::warn!("Ignoring P2P WebRTC signal from user {}: Legacy P2P is disabled", user_id);
                             }
+                        }
+                        }
+                        Err(e) => {
+                            tracing::warn!("Failed to parse WsEvent from user {}: {} — raw: {}", user_id, e, &text[..text.len().min(200)]);
                         }
                     }
                 }

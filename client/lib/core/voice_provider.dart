@@ -263,11 +263,36 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     final offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
+    // Wait for ICE gathering to complete so the SDP contains all candidates.
+    // This avoids sending an incomplete offer to the SFU.
+    final completer = Completer<void>();
+    pc.onIceGatheringState = (RTCIceGatheringState gatheringState) {
+      debugPrint('ICE gathering state: $gatheringState');
+      if (gatheringState == RTCIceGatheringState.RTCIceGatheringStateComplete &&
+          !completer.isCompleted) {
+        completer.complete();
+      }
+    };
+
+    // Timeout after 3 seconds in case gathering never completes
+    await completer.future.timeout(
+      const Duration(seconds: 3),
+      onTimeout: () {
+        debugPrint(
+            'ICE gathering timed out, sending offer with available candidates');
+      },
+    );
+
+    // Use the updated local description which now includes ICE candidates
+    final updatedDesc = await pc.getLocalDescription();
+    final sdpToSend = updatedDesc?.sdp ?? offer.sdp!;
+
+    debugPrint('Sending SFU offer (${sdpToSend.length} bytes)');
     _sendSignal(
       toUserId: serverId,
       channelId: channelId,
       signalType: 'offer',
-      payload: offer.sdp!,
+      payload: sdpToSend,
     );
   }
 
