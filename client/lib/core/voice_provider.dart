@@ -343,7 +343,11 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   }
 
   Future<void> _cleanupWebRTC() async {
-    await _serverConnection?.close();
+    try {
+      await _serverConnection?.close();
+    } catch (e) {
+      debugPrint('WebRTC close warning (safe to ignore): $e');
+    }
     _serverConnection = null;
     _remoteStreams.clear();
 

@@ -89,20 +89,8 @@ impl SfuServer {
             my_track: Arc::new(RwLock::new(None)),
         });
 
-        // Before adding ourselves, subscribe to all existing users in the channel
-        for other_user_entry in channel.users.iter() {
-            let other_user = other_user_entry.value();
-            let other_track_lock = other_user.my_track.read().await;
-            if let Some(other_track) = &*other_track_lock {
-                if let Err(e) = pc.add_track(other_track.clone()).await {
-                    tracing::error!("Error subscribing to existing track from {}: {}", other_user.user_id, e);
-                }
-            }
-        }
-
         channel.users.insert(user_id, user.clone());
 
-        let pc_c = Arc::downgrade(&pc);
         let channel_c = Arc::downgrade(&channel);
         let user_id_c = user_id;
         let my_track_c = user.my_track.clone();
@@ -117,11 +105,15 @@ impl SfuServer {
 
             Box::pin(async move {
                 let track_id = track.id();
-                tracing::info!("Received track {} from user {}", track_id, user_id_c);
+                let codec = track.codec();
+                tracing::info!(
+                    "Received track {} from user {} (codec: {}, kind: {})",
+                    track_id, user_id_c, codec.capability.mime_type, track.kind()
+                );
 
                 // Create a local track to broadcast this remote track
                 let track_local = Arc::new(TrackLocalStaticRTP::new(
-                    track.codec().capability,
+                    codec.capability,
                     track_id.clone(),
                     track.stream_id(),
                 ));
@@ -174,10 +166,34 @@ impl SfuServer {
             })
         }));
 
-        // Set remote description (the offer)
+        // Step 1: Set remote description FIRST so the client's audio transceiver is established
         pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?).await?;
 
-        // Create answer
+        // Step 2: AFTER remote description, subscribe to existing users' tracks.
+        // This ensures the tracks are added to the correct audio transceiver
+        // (created from the client's offer) rather than creating a new video transceiver.
+        let mut subscribed_count = 0u32;
+        for other_user_entry in channel.users.iter() {
+            let other_user = other_user_entry.value();
+            if other_user.user_id == user_id {
+                continue;
+            }
+            let other_track_lock = other_user.my_track.read().await;
+            if let Some(other_track) = &*other_track_lock {
+                match pc.add_track(other_track.clone()).await {
+                    Ok(_) => {
+                        subscribed_count += 1;
+                        tracing::info!("Subscribed user {} to track from user {}", user_id, other_user.user_id);
+                    }
+                    Err(e) => {
+                        tracing::error!("Error subscribing to existing track from {}: {}", other_user.user_id, e);
+                    }
+                }
+            }
+        }
+        tracing::info!("User {} subscribed to {} existing tracks", user_id, subscribed_count);
+
+        // Step 3: Create answer (includes all subscribed tracks)
         let answer = pc.create_answer(None).await?;
         pc.set_local_description(answer).await?;
 
