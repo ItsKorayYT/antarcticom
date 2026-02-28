@@ -517,18 +517,33 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   }
 
   /// Renegotiate with the SFU to pick up new tracks.
-  /// Creates a fresh peer connection and offer.
+  /// Reuses the existing peer connection — just sends a new offer.
   Future<void> _renegotiate() async {
     final channelId = state.currentChannelId;
-    if (channelId == null || _renegotiating) return;
+    final pc = _serverConnection;
+    if (channelId == null || pc == null || _renegotiating) return;
     _renegotiating = true;
 
     debugPrint('Renegotiating SFU connection for channel $channelId');
     try {
-      // Clean up old connection and start fresh
-      await _cleanupWebRTC();
-      await _startLocalAudio();
-      await _initiateSfuCall(channelId);
+      // Create a new offer on the EXISTING peer connection.
+      // This preserves the audio track and RTP loops.
+      final offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      // Brief wait for ICE candidates (they're already gathered, so this is fast)
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final updatedDesc = await pc.getLocalDescription();
+      final sdpToSend = updatedDesc?.sdp ?? offer.sdp!;
+
+      debugPrint('Sending renegotiation offer (${sdpToSend.length} bytes)');
+      _sendSignal(
+        toUserId: serverId,
+        channelId: channelId,
+        signalType: 'offer',
+        payload: sdpToSend,
+      );
     } catch (e) {
       debugPrint('Renegotiation failed: $e');
     } finally {
