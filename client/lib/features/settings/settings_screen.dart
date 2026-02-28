@@ -51,6 +51,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             child: BackgroundManager(
               theme: settings.backgroundTheme,
               opacity: 1.0,
+              customColor: settings.liquidCustomColor,
             ),
           ),
 
@@ -135,7 +136,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return Container(
       width: 280,
       decoration: BoxDecoration(
-        color: theme.bgSecondary.withValues(alpha: opacity),
+        color:
+            theme.bgSecondary.withValues(alpha: theme.bgSecondary.a * opacity),
         border: const Border(
           right: BorderSide(color: Colors.white12, width: 1),
         ),
@@ -521,39 +523,180 @@ class _AppearanceView extends ConsumerWidget {
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
-                child: CupertinoSlidingSegmentedControl<AppBackgroundTheme>(
-                  groupValue: settings.backgroundTheme,
-                  thumbColor: theme.accentPrimary,
-                  backgroundColor: Colors.black45,
-                  children: const {
-                    AppBackgroundTheme.stars: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text('Deep Space',
-                            style: TextStyle(color: Colors.white))),
-                    AppBackgroundTheme.sun: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text('Sunset',
-                            style: TextStyle(color: Colors.white))),
-                    AppBackgroundTheme.moon: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text('Night Moon',
-                            style: TextStyle(color: Colors.white))),
-                    AppBackgroundTheme.field: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
-                        child: Text('Starfield',
-                            style: TextStyle(color: Colors.white))),
-                  },
-                  onValueChanged: (val) {
-                    if (val != null) notifier.setBackgroundTheme(val);
-                  },
-                ),
+                child: settings.uiTheme == AppUiTheme.liquidGlass
+                    ? CupertinoSlidingSegmentedControl<AppBackgroundTheme>(
+                        groupValue: {
+                          AppBackgroundTheme.liquidDark,
+                          AppBackgroundTheme.liquidLight,
+                          AppBackgroundTheme.liquidCustom,
+                        }.contains(settings.backgroundTheme)
+                            ? settings.backgroundTheme
+                            : AppBackgroundTheme.liquidDark,
+                        thumbColor: theme.accentPrimary,
+                        backgroundColor: Colors.black45,
+                        children: const {
+                          AppBackgroundTheme.liquidDark: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Dark Liquid',
+                                  style: TextStyle(color: Colors.white))),
+                          AppBackgroundTheme.liquidLight: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Light Liquid',
+                                  style: TextStyle(color: Colors.white))),
+                          AppBackgroundTheme.liquidCustom: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Custom Tint',
+                                  style: TextStyle(color: Colors.white))),
+                        },
+                        onValueChanged: (val) {
+                          if (val != null) notifier.setBackgroundTheme(val);
+                        },
+                      )
+                    : CupertinoSlidingSegmentedControl<AppBackgroundTheme>(
+                        groupValue: {
+                          AppBackgroundTheme.stars,
+                          AppBackgroundTheme.sun,
+                          AppBackgroundTheme.moon,
+                          AppBackgroundTheme.field
+                        }.contains(settings.backgroundTheme)
+                            ? settings.backgroundTheme
+                            : AppBackgroundTheme.stars,
+                        thumbColor: theme.accentPrimary,
+                        backgroundColor: Colors.black45,
+                        children: const {
+                          AppBackgroundTheme.stars: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Deep Space',
+                                  style: TextStyle(color: Colors.white))),
+                          AppBackgroundTheme.sun: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Sunset',
+                                  style: TextStyle(color: Colors.white))),
+                          AppBackgroundTheme.moon: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Night Moon',
+                                  style: TextStyle(color: Colors.white))),
+                          AppBackgroundTheme.field: Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Text('Starfield',
+                                  style: TextStyle(color: Colors.white))),
+                        },
+                        onValueChanged: (val) {
+                          if (val != null) notifier.setBackgroundTheme(val);
+                        },
+                      ),
               ),
               const SizedBox(height: 24),
               const Divider(color: Colors.white12),
               const SizedBox(height: 12),
-              if (settings.backgroundTheme == AppBackgroundTheme.sun ||
-                  settings.backgroundTheme == AppBackgroundTheme.moon ||
-                  settings.backgroundTheme == AppBackgroundTheme.stars) ...[
+              if (settings.uiTheme == AppUiTheme.liquidGlass &&
+                  settings.backgroundTheme ==
+                      AppBackgroundTheme.liquidCustom) ...[
+                const _SettingRow(
+                  title: 'Liquid Tint Color',
+                  subtitle:
+                      'Select the base color for the algorithmic liquid glass blobs',
+                  trailing: SizedBox(),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 12, bottom: 24),
+                  child: Wrap(
+                    spacing: 16,
+                    runSpacing: 16,
+                    children: [
+                      _ColorSwatch(
+                          color: const Color(0xFF14B8A6), // Teal
+                          isSelected: settings.liquidCustomColor.toARGB32() ==
+                              0xFF14B8A6,
+                          onTap: () => notifier
+                              .setLiquidCustomColor(const Color(0xFF14B8A6))),
+                      _ColorSwatch(
+                          color: const Color(0xFFF59E0B), // Amber
+                          isSelected: settings.liquidCustomColor.toARGB32() ==
+                              0xFFF59E0B,
+                          onTap: () => notifier
+                              .setLiquidCustomColor(const Color(0xFFF59E0B))),
+                      _ColorSwatch(
+                          color: const Color(0xFF10B981), // Emerald
+                          isSelected: settings.liquidCustomColor.toARGB32() ==
+                              0xFF10B981,
+                          onTap: () => notifier
+                              .setLiquidCustomColor(const Color(0xFF10B981))),
+                      _ColorSwatch(
+                          color: const Color(0xFF8B5CF6), // Violet
+                          isSelected: settings.liquidCustomColor.toARGB32() ==
+                              0xFF8B5CF6,
+                          onTap: () => notifier
+                              .setLiquidCustomColor(const Color(0xFF8B5CF6))),
+                      GestureDetector(
+                        onTap: () {
+                          showDialog(
+                              context: context,
+                              builder: (context) {
+                                Color originalColor =
+                                    settings.liquidCustomColor;
+                                Color pickerColor = originalColor;
+                                return StatefulBuilder(
+                                    builder: (context, setState) {
+                                  return AlertDialog(
+                                    backgroundColor: const Color(0xFF1E1E1E),
+                                    title: const Text('Custom Tint',
+                                        style: TextStyle(color: Colors.white)),
+                                    content: SingleChildScrollView(
+                                      child: ColorPicker(
+                                        pickerColor: pickerColor,
+                                        onColorChanged: (c) {
+                                          setState(() => pickerColor = c);
+                                          notifier.setLiquidCustomColor(
+                                              c); // Live preview
+                                        },
+                                        labelTypes: const [],
+                                        pickerAreaHeightPercent: 0.8,
+                                      ),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                          child: const Text('Cancel',
+                                              style: TextStyle(
+                                                  color: Colors.white54)),
+                                          onPressed: () {
+                                            notifier.setLiquidCustomColor(
+                                                originalColor); // Revert
+                                            Navigator.of(context).pop();
+                                          }),
+                                      TextButton(
+                                          child: Text('Select',
+                                              style: TextStyle(
+                                                  color: theme.accentPrimary)),
+                                          onPressed: () {
+                                            Navigator.of(context).pop();
+                                          }),
+                                    ],
+                                  );
+                                });
+                              });
+                        },
+                        child: Container(
+                          width: 56,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: Colors.white10,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.white24, width: 2),
+                          ),
+                          child: const Icon(Icons.colorize,
+                              color: Colors.white, size: 28),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              if (settings.uiTheme == AppUiTheme.defaultDark &&
+                  (settings.backgroundTheme == AppBackgroundTheme.sun ||
+                      settings.backgroundTheme == AppBackgroundTheme.moon ||
+                      settings.backgroundTheme ==
+                          AppBackgroundTheme.stars)) ...[
                 if (settings.backgroundTheme == AppBackgroundTheme.sun)
                   _SettingRow(
                     title: 'Show Birds',

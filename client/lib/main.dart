@@ -5,9 +5,11 @@ import 'core/router.dart';
 import 'core/settings_provider.dart';
 
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart'; // Added for kIsWeb
+import 'package:flutter/foundation.dart';
+import 'dart:io';
+import 'package:flutter_acrylic/flutter_acrylic.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Force native/FFI Dart plugins to register explicitly on non-web platforms.
@@ -15,6 +17,10 @@ void main() {
   // method channels throw MissingPluginException
   if (!kIsWeb) {
     ui.DartPluginRegistrant.ensureInitialized();
+  }
+
+  if (!kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux)) {
+    await Window.initialize();
   }
 
   runApp(const ProviderScope(child: AntarcticomApp()));
@@ -29,7 +35,31 @@ class AntarcticomApp extends ConsumerStatefulWidget {
 
 class _AntarcticomAppState extends ConsumerState<AntarcticomApp> {
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _applyWindowEffect(ref.read(settingsProvider).uiTheme);
+    });
+  }
+
+  void _applyWindowEffect(AppUiTheme themeVal) {
+    if (kIsWeb || !Platform.isWindows) return;
+    if (themeVal == AppUiTheme.liquidGlass) {
+      Window.setEffect(
+          effect: WindowEffect.transparent, color: Colors.transparent);
+    } else {
+      Window.setEffect(effect: WindowEffect.disabled);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    ref.listen(settingsProvider.select((s) => s.uiTheme), (previous, next) {
+      if (previous != next) {
+        _applyWindowEffect(next);
+      }
+    });
+
     final router = ref.watch(routerProvider);
     final theme = ref.watch(themeProvider); // Watch the theme provider
     final settings = ref.watch(

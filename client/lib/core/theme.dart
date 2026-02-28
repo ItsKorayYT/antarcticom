@@ -36,6 +36,11 @@ class AppThemeData {
   final LinearGradient accentGradient;
   final LinearGradient subtleGradient;
 
+  final double radiusSm;
+  final double radiusMd;
+  final double radiusLg;
+  final double radiusXl;
+
   final ThemeData materialTheme;
 
   const AppThemeData({
@@ -61,6 +66,10 @@ class AppThemeData {
     required this.dividerColor,
     required this.accentGradient,
     required this.subtleGradient,
+    required this.radiusSm,
+    required this.radiusMd,
+    required this.radiusLg,
+    required this.radiusXl,
     required this.materialTheme,
   });
 
@@ -72,17 +81,29 @@ class AppThemeData {
       bgTertiary: const Color(0xFF1B1F2E),
       bgHover: const Color(0xFF222738),
       dividerColor: const Color(0xFF1E2235),
+      radiusSm: 6.0,
+      radiusMd: 8.0,
+      radiusLg: 12.0,
+      radiusXl: 16.0,
     );
   }
 
-  static AppThemeData get glassTheme {
+  static AppThemeData getGlassTheme({bool isLight = false}) {
     return _buildTheme(
-      bgDeepest: const Color(0x660A0A0F),
-      bgPrimary: const Color(0x770F1117),
-      bgSecondary: const Color(0x44151822),
-      bgTertiary: const Color(0x551B1F2E),
-      bgHover: const Color(0x66222738),
-      dividerColor: const Color(0x33FFFFFF),
+      bgDeepest: isLight ? const Color(0x11000000) : const Color(0x660A0A0F),
+      bgPrimary: isLight ? const Color(0x77FFFFFF) : const Color(0x770F1117),
+      bgSecondary: isLight ? const Color(0x55FFFFFF) : const Color(0x44151822),
+      bgTertiary: isLight ? const Color(0x66FFFFFF) : const Color(0x551B1F2E),
+      bgHover: isLight ? const Color(0x22000000) : const Color(0x66222738),
+      dividerColor: isLight ? const Color(0x1A000000) : const Color(0x33FFFFFF),
+      textPrimary: isLight ? const Color(0xFF111111) : const Color(0xFFEEEFF2),
+      textSecondary:
+          isLight ? const Color(0xFF444444) : const Color(0xFF8B8FA3),
+      textMuted: isLight ? const Color(0xFF777777) : const Color(0xFF5A5E73),
+      radiusSm: 12.0,
+      radiusMd: 24.0,
+      radiusLg: 32.0,
+      radiusXl: 48.0,
     );
   }
 
@@ -93,12 +114,16 @@ class AppThemeData {
     required Color bgTertiary,
     required Color bgHover,
     required Color dividerColor,
+    Color textPrimary = const Color(0xFFEEEFF2),
+    Color textSecondary = const Color(0xFF8B8FA3),
+    Color textMuted = const Color(0xFF5A5E73),
+    required double radiusSm,
+    required double radiusMd,
+    required double radiusLg,
+    required double radiusXl,
   }) {
     const accentPrimary = Color(0xFF6C5CE7);
     const accentSecondary = Color(0xFF00D2FF);
-    const textPrimary = Color(0xFFEEEFF2);
-    const textSecondary = Color(0xFF8B8FA3);
-    const textMuted = Color(0xFF5A5E73);
     const danger = Color(0xFFFF1744);
 
     return AppThemeData(
@@ -122,6 +147,10 @@ class AppThemeData {
       voiceRing: accentPrimary,
       danger: danger,
       dividerColor: dividerColor,
+      radiusSm: radiusSm,
+      radiusMd: radiusMd,
+      radiusLg: radiusLg,
+      radiusXl: radiusXl,
       accentGradient: const LinearGradient(
         colors: [accentPrimary, accentSecondary],
         begin: Alignment.topLeft,
@@ -163,13 +192,13 @@ class AppThemeData {
                 ),
               ],
             ),
-            headlineMedium: const TextStyle(
+            headlineMedium: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w600,
               color: textPrimary,
               letterSpacing: -0.3,
             ),
-            headlineSmall: const TextStyle(
+            headlineSmall: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
               color: textPrimary,
@@ -187,13 +216,13 @@ class AppThemeData {
                 ),
               ],
             ),
-            bodyMedium: const TextStyle(
+            bodyMedium: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w400,
               color: textSecondary,
               height: 1.5,
             ),
-            bodySmall: const TextStyle(
+            bodySmall: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w400,
               color: textMuted,
@@ -211,7 +240,7 @@ class AppThemeData {
                 ),
               ],
             ),
-            labelMedium: const TextStyle(
+            labelMedium: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: textSecondary,
@@ -221,21 +250,21 @@ class AppThemeData {
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: bgDeepest,
-          hintStyle: const TextStyle(color: textMuted),
+          hintStyle: TextStyle(color: textMuted),
           contentPadding: const EdgeInsets.symmetric(
             horizontal: AntarcticomTheme.spacingMd,
             vertical: 14,
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
+            borderRadius: BorderRadius.circular(radiusMd),
             borderSide: BorderSide.none,
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
+            borderRadius: BorderRadius.circular(radiusMd),
             borderSide: BorderSide.none,
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
+            borderRadius: BorderRadius.circular(radiusMd),
             borderSide: const BorderSide(color: accentPrimary, width: 1.5),
           ),
         ),
@@ -249,7 +278,7 @@ class AppThemeData {
               vertical: 14,
             ),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
+              borderRadius: BorderRadius.circular(radiusMd),
             ),
             textStyle: const TextStyle(
               fontSize: 14,
@@ -257,7 +286,7 @@ class AppThemeData {
             ),
           ),
         ),
-        iconTheme: const IconThemeData(
+        iconTheme: IconThemeData(
           color: textSecondary,
           size: 20,
         ),
@@ -269,9 +298,9 @@ class AppThemeData {
         tooltipTheme: TooltipThemeData(
           decoration: BoxDecoration(
             color: bgTertiary,
-            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusSm),
+            borderRadius: BorderRadius.circular(radiusSm),
           ),
-          textStyle: const TextStyle(
+          textStyle: TextStyle(
             color: textPrimary,
             fontSize: 12,
           ),
@@ -287,10 +316,12 @@ class AppThemeData {
 }
 
 final themeProvider = Provider<AppThemeData>((ref) {
-  final uiTheme = ref.watch(settingsProvider.select((s) => s.uiTheme));
-  return uiTheme == AppUiTheme.liquidGlass
-      ? AppThemeData.glassTheme
-      : AppThemeData.defaultTheme;
+  final settings = ref.watch(settingsProvider);
+  if (settings.uiTheme == AppUiTheme.liquidGlass) {
+    bool isLightBg = settings.backgroundTheme == AppBackgroundTheme.liquidLight;
+    return AppThemeData.getGlassTheme(isLight: isLightBg);
+  }
+  return AppThemeData.defaultTheme;
 });
 
 class AntarcticomTheme {

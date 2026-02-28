@@ -171,7 +171,7 @@ class _MemberItem extends ConsumerWidget {
       builder: (ctx) => Dialog(
         backgroundColor: theme.bgSecondary,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
+          borderRadius: BorderRadius.circular(theme.radiusMd),
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 340),
@@ -185,9 +185,9 @@ class _MemberItem extends ConsumerWidget {
                   height: 60,
                   decoration: BoxDecoration(
                     gradient: theme.accentGradient,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(AntarcticomTheme.radiusMd),
-                      topRight: Radius.circular(AntarcticomTheme.radiusMd),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(theme.radiusMd),
+                      topRight: Radius.circular(theme.radiusMd),
                     ),
                   ),
                 ),
@@ -553,7 +553,7 @@ class _RoleManagerDialogState extends ConsumerState<_RoleManagerDialog> {
     return Dialog(
       backgroundColor: theme.bgSecondary,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
+        borderRadius: BorderRadius.circular(theme.radiusMd),
       ),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 400, maxHeight: 500),

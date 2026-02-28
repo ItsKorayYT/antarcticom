@@ -44,6 +44,7 @@ dependencies:
 
   flutter_colorpicker: ^1.1.0
   crop_image: ^1.0.17
+  flutter_acrylic: ^1.1.4
 
 dev_dependencies:
   flutter_test:

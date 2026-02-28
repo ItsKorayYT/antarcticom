@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import '../../core/settings_provider.dart';
 import 'starfield_widget.dart';
 import 'animated_themes.dart';
+import 'liquid_glass_background.dart';
 
 class BackgroundManager extends StatelessWidget {
   final AppBackgroundTheme theme;
   final double opacity;
+  final Color? customColor;
 
   const BackgroundManager({
     super.key,
     required this.theme,
     this.opacity = 0.5,
+    this.customColor,
   });
 
   @override
@@ -28,6 +31,15 @@ class BackgroundManager extends StatelessWidget {
         break;
       case AppBackgroundTheme.field:
         background = const FieldThemeWidget();
+        break;
+      case AppBackgroundTheme.liquidDark:
+        background = const LiquidGlassBackgroundWidget(isLightMode: false);
+        break;
+      case AppBackgroundTheme.liquidLight:
+        background = const LiquidGlassBackgroundWidget(isLightMode: true);
+        break;
+      case AppBackgroundTheme.liquidCustom:
+        background = LiquidGlassBackgroundWidget(customColor: customColor);
         break;
     }
 

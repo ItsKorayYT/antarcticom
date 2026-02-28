@@ -69,8 +69,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 constraints: const BoxConstraints(maxWidth: 400),
                 decoration: BoxDecoration(
                   color: theme.bgSecondary,
-                  borderRadius:
-                      BorderRadius.circular(AntarcticomTheme.radiusLg),
+                  borderRadius: BorderRadius.circular(theme.radiusLg),
                   border: Border.all(
                     color: theme.accentPrimary
                         .withValues(alpha: _glowAnimation.value * 0.3),
@@ -147,8 +146,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: theme.accentGradient,
-                      borderRadius:
-                          BorderRadius.circular(AntarcticomTheme.radiusMd),
+                      borderRadius: BorderRadius.circular(theme.radiusMd),
                     ),
                     child: ElevatedButton(
                       onPressed: auth.isLoading ? null : _handleLogin,

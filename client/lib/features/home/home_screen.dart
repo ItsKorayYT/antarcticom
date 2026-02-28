@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:ui' as ui;
 import 'package:go_router/go_router.dart';
 import '../../core/theme.dart';
 import '../../core/auth_provider.dart';
@@ -10,6 +11,7 @@ import '../../core/voice_provider.dart';
 import '../../core/settings_provider.dart';
 import '../../core/api_service.dart';
 import 'background_manager.dart';
+
 import 'rainbow_builder.dart';
 import '../../core/member_provider.dart';
 import '../../core/models/permissions.dart';
@@ -92,7 +94,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return Container(
         width: vertical ? 80 : null,
         height: vertical ? null : 64,
-        color: theme.bgSecondary.withValues(alpha: settings.sidebarOpacity),
+        color: theme.bgSecondary
+            .withValues(alpha: theme.bgSecondary.a * settings.sidebarOpacity),
         child: vertical
             ? Column(
                 children: [
@@ -124,7 +127,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Widget buildSidebar() {
       return Container(
         width: 240,
-        color: theme.bgSecondary.withValues(alpha: settings.sidebarOpacity),
+        color: theme.bgSecondary
+            .withValues(alpha: theme.bgSecondary.a * settings.sidebarOpacity),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -276,7 +280,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Widget buildContent() {
       return Expanded(
         child: Container(
-          color: theme.bgPrimary.withValues(alpha: settings.backgroundOpacity),
+          color: theme.bgPrimary.withValues(
+              alpha: theme.bgPrimary.a * settings.backgroundOpacity),
           child: widget.child,
         ),
       );
@@ -349,7 +354,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: theme.bgDeepest,
+      backgroundColor: settings.uiTheme == AppUiTheme.liquidGlass
+          ? Colors.transparent
+          : theme.bgDeepest,
       body: Stack(
         children: [
           // Background
@@ -357,11 +364,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: BackgroundManager(
               theme: settings.backgroundTheme,
               opacity: 1.0,
+              customColor: settings.liquidCustomColor,
             ),
           ),
 
           // Layout
-          Positioned.fill(child: layout),
+          Positioned.fill(
+            child: settings.uiTheme == AppUiTheme.liquidGlass
+                ? ClipRRect(
+                    child: BackdropFilter(
+                      filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: layout,
+                    ),
+                  )
+                : layout,
+          ),
         ],
       ),
     );
@@ -687,7 +704,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       height: 52,
       padding:
           const EdgeInsets.symmetric(horizontal: AntarcticomTheme.spacingSm),
-      color: theme.bgSecondary.withValues(alpha: settings.sidebarOpacity),
+      color: theme.bgSecondary
+          .withValues(alpha: theme.bgSecondary.a * settings.sidebarOpacity),
       child: Row(
         children: [
           RainbowBuilder(
@@ -1043,9 +1061,7 @@ class _ServerIconState extends State<_ServerIcon> {
                         ? (isActive ? effectiveColor : theme.bgTertiary)
                         : (isActive ? effectiveColor : theme.bgTertiary),
                     borderRadius: BorderRadius.circular(
-                      isActive
-                          ? AntarcticomTheme.radiusMd
-                          : AntarcticomTheme.radiusXl,
+                      isActive ? theme.radiusMd : theme.radiusXl,
                     ),
                   ),
                   child: Center(
@@ -1171,7 +1187,7 @@ class _ChannelItemState extends ConsumerState<_ChannelItem> {
             color: isHighlighted
                 ? theme.bgHover.withValues(alpha: widget.isActive ? 1.0 : 0.6)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusSm),
+            borderRadius: BorderRadius.circular(theme.radiusSm),
           ),
           child: Row(
             children: [

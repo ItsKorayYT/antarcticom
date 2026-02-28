@@ -6,12 +6,21 @@ import 'theme.dart';
 
 enum TaskbarPosition { left, right, top, bottom }
 
-enum AppBackgroundTheme { stars, sun, moon, field }
+enum AppBackgroundTheme {
+  stars,
+  sun,
+  moon,
+  field,
+  liquidDark,
+  liquidLight,
+  liquidCustom
+}
 
 class AppSettings {
   final double sidebarOpacity;
   final double backgroundOpacity;
   final Color accentColor;
+  final Color liquidCustomColor;
   final bool enableStarfield; // Kept for legacy compatibility check
   final double starDensity;
   final TaskbarPosition taskbarPosition;
@@ -22,6 +31,7 @@ class AppSettings {
     this.sidebarOpacity = 0.85,
     this.backgroundOpacity = 0.5,
     this.accentColor = const Color(0xFF6C5CE7),
+    this.liquidCustomColor = const Color(0xFF14B8A6), // Default Teal Tint
     this.enableStarfield = true,
     this.starDensity = 0.5,
     this.taskbarPosition = TaskbarPosition.bottom,
@@ -60,6 +70,7 @@ class AppSettings {
     double? sidebarOpacity,
     double? backgroundOpacity,
     Color? accentColor,
+    Color? liquidCustomColor,
     bool? enableStarfield,
     double? starDensity,
     TaskbarPosition? taskbarPosition,
@@ -83,6 +94,7 @@ class AppSettings {
       sidebarOpacity: sidebarOpacity ?? this.sidebarOpacity,
       backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
       accentColor: accentColor ?? this.accentColor,
+      liquidCustomColor: liquidCustomColor ?? this.liquidCustomColor,
       enableStarfield: enableStarfield ?? this.enableStarfield,
       starDensity: starDensity ?? this.starDensity,
       taskbarPosition: taskbarPosition ?? this.taskbarPosition,
@@ -118,6 +130,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   static const _keySidebarOpacity = 'sidebar_opacity';
   static const _keyBgOpacity = 'bg_opacity';
   static const _keyAccentColor = 'accent_color';
+  static const _keyLiquidCustomColor = 'liquid_custom_color';
   static const _keyStarfield = 'enable_starfield';
   static const _keyTaskbarPos = 'taskbar_pos';
   static const _keyBgTheme = 'bg_theme';
@@ -135,9 +148,26 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   static const _keyOutputDeviceId = 'output_device_id';
 
   Future<void> setUiTheme(AppUiTheme theme) async {
-    state = state.copyWith(uiTheme: theme);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyUiTheme, theme.index);
+
+    AppBackgroundTheme newBg = state.backgroundTheme;
+    if (theme == AppUiTheme.liquidGlass) {
+      if (newBg != AppBackgroundTheme.liquidDark &&
+          newBg != AppBackgroundTheme.liquidLight &&
+          newBg != AppBackgroundTheme.liquidCustom) {
+        newBg = AppBackgroundTheme.liquidDark;
+      }
+    } else {
+      if (newBg == AppBackgroundTheme.liquidDark ||
+          newBg == AppBackgroundTheme.liquidLight ||
+          newBg == AppBackgroundTheme.liquidCustom) {
+        newBg = AppBackgroundTheme.stars;
+      }
+    }
+
+    state = state.copyWith(uiTheme: theme, backgroundTheme: newBg);
+    await prefs.setInt(_keyBgTheme, newBg.index);
   }
 
   Future<void> setMoonPosition(double x, double y) async {
@@ -216,6 +246,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final bgOpacity = prefs.getDouble(_keyBgOpacity) ?? 0.5;
     final starfield = prefs.getBool(_keyStarfield) ?? true;
     final accentValue = prefs.getInt(_keyAccentColor);
+    final liquidCustomValue = prefs.getInt(_keyLiquidCustomColor);
 
     final taskbarIndex =
         prefs.getInt(_keyTaskbarPos) ?? TaskbarPosition.bottom.index;
@@ -266,6 +297,9 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       enableStarfield: starfield,
       accentColor:
           accentValue != null ? Color(accentValue) : const Color(0xFF6C5CE7),
+      liquidCustomColor: liquidCustomValue != null
+          ? Color(liquidCustomValue)
+          : const Color(0xFF14B8A6),
       taskbarPosition: loadedPosition,
       backgroundTheme: loadedBgTheme,
       uiTheme: loadedUiTheme,
@@ -301,6 +335,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = state.copyWith(accentColor: value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyAccentColor, value.toARGB32());
+  }
+
+  Future<void> setLiquidCustomColor(Color value) async {
+    state = state.copyWith(liquidCustomColor: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyLiquidCustomColor, value.toARGB32());
   }
 
   Future<void> toggleStarfield(bool value) async {

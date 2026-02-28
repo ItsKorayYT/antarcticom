@@ -79,7 +79,8 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
           padding: const EdgeInsets.symmetric(
               horizontal: AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color: theme.bgPrimary.withValues(alpha: settings.sidebarOpacity),
+            color: theme.bgPrimary
+                .withValues(alpha: theme.bgPrimary.a * settings.sidebarOpacity),
           ),
           child: Row(
             children: [
@@ -155,8 +156,9 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                           ),
                         )
                       : Container(
-                          color: theme.bgPrimary
-                              .withValues(alpha: settings.backgroundOpacity),
+                          color: theme.bgPrimary.withValues(
+                              alpha: theme.bgPrimary.a *
+                                  settings.backgroundOpacity),
                           child: ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.symmetric(
@@ -189,7 +191,8 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
         Container(
           padding: const EdgeInsets.all(AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color: theme.bgPrimary.withValues(alpha: settings.sidebarOpacity),
+            color: theme.bgPrimary
+                .withValues(alpha: theme.bgPrimary.a * settings.sidebarOpacity),
           ),
           child: Row(
             children: [
@@ -197,8 +200,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                 child: Container(
                   decoration: BoxDecoration(
                     color: theme.bgTertiary.withValues(alpha: 0.8),
-                    borderRadius:
-                        BorderRadius.circular(AntarcticomTheme.radiusMd),
+                    borderRadius: BorderRadius.circular(theme.radiusMd),
                   ),
                   child: TextField(
                     controller: _messageController,
@@ -338,7 +340,7 @@ class _MessageBubble extends ConsumerWidget {
               vertical: AntarcticomTheme.spacingSm,
             ),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AntarcticomTheme.radiusSm),
+              borderRadius: BorderRadius.circular(theme.radiusSm),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
