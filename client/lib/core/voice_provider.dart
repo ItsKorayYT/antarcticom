@@ -525,7 +525,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   /// Schedule a renegotiation with a short delay to batch rapid join events.
   void _scheduleRenegotiate() {
     _renegotiateTimer?.cancel();
-    _renegotiateTimer = Timer(const Duration(seconds: 2), () {
+    _renegotiateTimer = Timer(const Duration(seconds: 5), () {
       _renegotiate();
     });
   }
@@ -536,6 +536,19 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   Future<void> _renegotiate() async {
     final channelId = state.currentChannelId;
     if (channelId == null || _renegotiating) return;
+
+    // Don't renegotiate if we're still waiting for an answer to our current offer.
+    // The initial connection needs to complete first.
+    if (_serverConnection != null) {
+      final sigState = _serverConnection!.signalingState;
+      if (sigState == RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+        debugPrint(
+            'Deferring renegotiation — still waiting for answer (state: $sigState)');
+        _scheduleRenegotiate(); // Retry later
+        return;
+      }
+    }
+
     _renegotiating = true;
 
     debugPrint('Renegotiating with SFU for channel $channelId');
