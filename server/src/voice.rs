@@ -177,14 +177,14 @@ impl SfuServer {
         pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?).await?;
 
         // Step 2: Subscribe to existing users' tracks.
-        // We iterate over the PC's transceivers to find the `recvonly` ones created by the offer,
-        // and attach the existing tracks to their senders. This guarantees they go out
-        // through the negotiated audio slots.
+        // The client's offer contains `recvonly` transceivers, which appear as
+        // `Sendonly` on the server side (direction is from the local perspective).
+        // We find those and attach existing users' tracks to their senders.
         let mut subscribed_count = 0u32;
         let transceivers = pc.get_transceivers().await;
         
         let mut available_transceivers = transceivers.into_iter().filter(|t| {
-            t.direction() == webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Recvonly
+            t.direction() == webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly
         });
 
         for other_user_entry in channel.users.iter() {
@@ -197,8 +197,6 @@ impl SfuServer {
                 if let Some(transceiver) = available_transceivers.next() {
                     match transceiver.sender().await.replace_track(Some(other_track.clone())).await {
                         Ok(_) => {
-                            // Also update direction to sendrecv so the answer reflects that we are sending
-                            transceiver.set_direction(webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendrecv);
                             subscribed_count += 1;
                             tracing::info!("Subscribed user {} to track from user {} via transceiver", user_id, other_user.user_id);
                         }
@@ -207,7 +205,7 @@ impl SfuServer {
                         }
                     }
                 } else {
-                    tracing::warn!("No available recvonly transceiver for user {}'s track!", other_user.user_id);
+                    tracing::warn!("No available sendonly transceiver for user {}'s track!", other_user.user_id);
                 }
             }
         }

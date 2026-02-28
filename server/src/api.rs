@@ -1470,6 +1470,9 @@ async fn voice_leave(
 ) -> AppResult<StatusCode> {
     let user_id = auth.user_id;
 
+    // Clean up SFU peer connection
+    state.sfu.leave_channel(channel_id, user_id).await;
+
     if let Some(mut participants) = state.voice_states.get_mut(&channel_id) {
         participants.retain(|p| p.user_id != user_id);
         // Clean up empty channels

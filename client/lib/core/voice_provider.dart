@@ -298,10 +298,9 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
 
     // Pre-allocate recvonly audio transceivers so the SFU can fill them
-    // with other users' audio tracks. The SFU's add_track will reuse these,
-    // ensuring tracks arrive as audio kind (not video).
+    // with other users' audio tracks via replace_track on the sendonly side.
     final currentParticipants = state.participantsFor(channelId).length;
-    final recvSlots = max(currentParticipants, 1); // One slot per other user
+    final recvSlots = max(currentParticipants, 1); // At least one slot
     for (int i = 0; i < recvSlots; i++) {
       await pc.addTransceiver(
         kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
@@ -312,7 +311,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
     debugPrint('Added $recvSlots recvonly audio transceivers');
 
-    // Create the offer (now includes local audio + recvonly audio transceivers)
+    // Create the offer (local audio + recvonly audio transceivers)
     final offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
@@ -361,24 +360,14 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     required String signalType,
     required dynamic payload,
   }) {
+    // Only send on the primary socket — the SFU lives on this server.
+    // Sending on multiple sockets would cause duplicate offers and corrupt SFU state.
     _primarySocket.sendWebRTCSignal(
       toUserId: toUserId,
       channelId: channelId,
       signalType: signalType,
       payload: payload,
     );
-
-    for (final host in _connMgr.hosts) {
-      final socket = _connMgr.getSocketForHost(host.url);
-      if (socket != null && socket != _primarySocket) {
-        socket.sendWebRTCSignal(
-          toUserId: toUserId,
-          channelId: channelId,
-          signalType: signalType,
-          payload: payload,
-        );
-      }
-    }
   }
 
   Future<void> _cleanupWebRTC() async {
@@ -528,13 +517,37 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     if (channelId == null || _renegotiating) return;
     _renegotiating = true;
 
-    debugPrint('Reconnecting to SFU for channel $channelId');
+    debugPrint('Renegotiating with SFU for channel $channelId');
     try {
-      await _cleanupWebRTC();
-      await _startLocalAudio();
+      // Only close the peer connection and renderers — preserve the local
+      // audio stream so we don't lose mic access or trigger re-prompts.
+      try {
+        await _serverConnection?.close();
+      } catch (e) {
+        debugPrint('PC close warning (safe to ignore): $e');
+      }
+      _serverConnection = null;
+      _remoteStreams.clear();
+
+      final renderers = _audioRenderers.values.toList();
+      _audioRenderers.clear();
+      for (final renderer in renderers) {
+        try {
+          renderer.srcObject = null;
+          await renderer.dispose();
+        } catch (e) {
+          debugPrint('Renderer dispose warning (safe to ignore): $e');
+        }
+      }
+
+      // Re-capture mic only if we don't have a local stream
+      if (_localStream == null) {
+        await _startLocalAudio();
+      }
+
       await _initiateSfuCall(channelId);
     } catch (e) {
-      debugPrint('Reconnection failed: $e');
+      debugPrint('Renegotiation failed: $e');
     } finally {
       _renegotiating = false;
     }
