@@ -10,8 +10,6 @@ use webrtc::interceptor::registry::Registry;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
-use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::TrackLocalWriter;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_remote::TrackRemote;
@@ -100,16 +98,12 @@ impl SfuServer {
 
         channel.users.insert(user_id, user.clone());
 
-        let channel_c = Arc::downgrade(&channel);
-        let user_id_c = user_id;
         let my_track_c = user.my_track.clone();
+        let user_id_c = user_id;
 
-        // Handle incoming tracks from this user
+        // Handle incoming tracks from this user.
+        // We just store the track — other users pick it up when they renegotiate.
         pc.on_track(Box::new(move |track: Arc<TrackRemote>, _receiver, _transceiver| {
-            let channel = match channel_c.upgrade() {
-                Some(c) => c,
-                None => return Box::pin(async {}),
-            };
             let my_track_inner = my_track_c.clone();
 
             Box::pin(async move {
@@ -127,33 +121,13 @@ impl SfuServer {
                     track.stream_id(),
                 ));
 
-                // Save our track so future joiners can subscribe
+                // Save our track so other users can subscribe when they renegotiate
                 {
                     let mut my_track_write = my_track_inner.write().await;
                     *my_track_write = Some(track_local.clone());
                 }
 
-                // Add this track to our "outgoing" pool for other users in the channel
-                // Use add_transceiver_from_track with sendonly to ensure a proper audio transceiver
-                for other_user_entry in channel.users.iter() {
-                    let other_user = other_user_entry.value();
-                    if other_user.user_id != user_id_c {
-                        let init = RTCRtpTransceiverInit {
-                            direction: webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly,
-                            send_encodings: vec![],
-                        };
-                        match other_user.peer_connection.add_transceiver_from_track(track_local.clone(), Some(init)).await {
-                            Ok(_) => {
-                                tracing::info!("Forwarded new track to user {}", other_user.user_id);
-                            }
-                            Err(e) => {
-                                tracing::error!("Error adding track to user {}: {}", other_user.user_id, e);
-                            }
-                        }
-                    }
-                }
-
-                // Forward RTP packets
+                // Forward RTP packets from the remote track to the local track
                 loop {
                     match track.read_rtp().await {
                         Ok((rtp_packet, _attributes)) => {
@@ -185,12 +159,13 @@ impl SfuServer {
             })
         }));
 
-        // Step 1: Set remote description FIRST so the client's audio transceiver is established
+        // Step 1: Set remote description FIRST so the client's audio transceivers are established.
+        // The client's offer includes recvonly audio transceivers that we can fill with tracks.
         pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?).await?;
 
-        // Step 2: AFTER remote description, subscribe to existing users' tracks.
-        // This ensures the tracks are added to the correct audio transceiver
-        // (created from the client's offer) rather than creating a new video transceiver.
+        // Step 2: Subscribe to existing users' tracks using add_track.
+        // The client's offer includes recvonly audio transceivers, so add_track will
+        // reuse them — ensuring the tracks arrive as audio kind on the client.
         let mut subscribed_count = 0u32;
         for other_user_entry in channel.users.iter() {
             let other_user = other_user_entry.value();
@@ -199,11 +174,7 @@ impl SfuServer {
             }
             let other_track_lock = other_user.my_track.read().await;
             if let Some(other_track) = &*other_track_lock {
-                let init = RTCRtpTransceiverInit {
-                    direction: webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly,
-                    send_encodings: vec![],
-                };
-                match pc.add_transceiver_from_track(other_track.clone(), Some(init)).await {
+                match pc.add_track(other_track.clone()).await {
                     Ok(_) => {
                         subscribed_count += 1;
                         tracing::info!("Subscribed user {} to track from user {}", user_id, other_user.user_id);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -123,6 +124,12 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
   /// Audio renderers for remote streams (required on desktop for playback).
   final Map<String, RTCVideoRenderer> _audioRenderers = {};
+
+  /// Timer for debounced renegotiation.
+  Timer? _renegotiateTimer;
+
+  /// Whether a renegotiation is already in progress.
+  bool _renegotiating = false;
 
   static const String serverId = '00000000-0000-0000-0000-000000000000';
 
@@ -287,6 +294,22 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       }
     }
 
+    // Pre-allocate recvonly audio transceivers so the SFU can fill them
+    // with other users' audio tracks. The SFU's add_track will reuse these,
+    // ensuring tracks arrive as audio kind (not video).
+    final currentParticipants = state.participantsFor(channelId).length;
+    final recvSlots = max(currentParticipants + 2, 5); // Room for growth
+    for (int i = 0; i < recvSlots; i++) {
+      await pc.addTransceiver(
+        kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
+        init: RTCRtpTransceiverInit(
+          direction: TransceiverDirection.RecvOnly,
+        ),
+      );
+    }
+    debugPrint('Added $recvSlots recvonly audio transceivers');
+
+    // Create the offer (now includes local audio + recvonly audio transceivers)
     final offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
@@ -473,6 +496,43 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       );
     } else {
       state = state.copyWith(participants: newParticipants);
+
+      // When another user joins our current voice channel, renegotiate
+      // so the SFU can include their audio track in the new answer.
+      if (joined &&
+          !isCurrentUser &&
+          channelId == state.currentChannelId &&
+          _serverConnection != null) {
+        _scheduleRenegotiate();
+      }
+    }
+  }
+
+  /// Schedule a renegotiation with a short delay to batch rapid join events.
+  void _scheduleRenegotiate() {
+    _renegotiateTimer?.cancel();
+    _renegotiateTimer = Timer(const Duration(seconds: 2), () {
+      _renegotiate();
+    });
+  }
+
+  /// Renegotiate with the SFU to pick up new tracks.
+  /// Creates a fresh peer connection and offer.
+  Future<void> _renegotiate() async {
+    final channelId = state.currentChannelId;
+    if (channelId == null || _renegotiating) return;
+    _renegotiating = true;
+
+    debugPrint('Renegotiating SFU connection for channel $channelId');
+    try {
+      // Clean up old connection and start fresh
+      await _cleanupWebRTC();
+      await _startLocalAudio();
+      await _initiateSfuCall(channelId);
+    } catch (e) {
+      debugPrint('Renegotiation failed: $e');
+    } finally {
+      _renegotiating = false;
     }
   }
 
