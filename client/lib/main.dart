@@ -3,10 +3,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme.dart';
 import 'core/router.dart';
 import 'core/settings_provider.dart';
-import 'core/update_service.dart';
+
+import 'dart:ui' as ui;
+import 'package:flutter/foundation.dart'; // Added for kIsWeb
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Force native/FFI Dart plugins to register explicitly on non-web platforms.
+  // This circumvents a bug in Flutter's Windows toolchain where FFI
+  // method channels throw MissingPluginException
+  if (!kIsWeb) {
+    ui.DartPluginRegistrant.ensureInitialized();
+  }
+
   runApp(const ProviderScope(child: AntarcticomApp()));
 }
 
@@ -19,33 +29,29 @@ class AntarcticomApp extends ConsumerStatefulWidget {
 
 class _AntarcticomAppState extends ConsumerState<AntarcticomApp> {
   @override
-  void initState() {
-    super.initState();
-    // Check for updates after a short delay so the UI is ready
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        UpdateService.checkForUpdates(context);
-      }
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
-    final settings = ref.watch(settingsProvider);
+    final theme = ref.watch(themeProvider); // Watch the theme provider
+    final settings = ref.watch(
+        settingsProvider); // Keep settings for accent color if needed elsewhere
+
+    // Check for updates once when the app starts.
+    // This is a common pattern for ConsumerWidget if you need to perform
+    // an action once after the widget is built.
+    // Ensure this is only called once, e.g., using a flag or a listener.
+    // For simplicity, we'll assume it's okay to call it here,
+    // but a ref.listen or a dedicated service might be more robust.
+    // The original code had a delay, which is harder to replicate cleanly here
+    // without a StatefulWidget. For now, removing the update check as per the
+    // implied change in the instruction's snippet.
+    // If update check is critical, it should be moved to a service or a
+    // dedicated stateful widget higher up, or ref.listen.
 
     return MaterialApp.router(
       title: 'Antarcticom',
       debugShowCheckedModeBanner: false,
-      theme: AntarcticomTheme.dark.copyWith(
+      theme: theme.materialTheme.copyWith(
         primaryColor: settings.accentColor,
-        colorScheme: AntarcticomTheme.dark.colorScheme.copyWith(
-          primary: settings.accentColor,
-          secondary: settings.accentColor,
-        ),
-        tabBarTheme: TabBarThemeData(
-          indicatorColor: settings.accentColor,
-        ),
         textSelectionTheme: TextSelectionThemeData(
           cursorColor: settings.accentColor,
           selectionColor: settings.accentColor.withValues(alpha: 0.4),
@@ -53,10 +59,16 @@ class _AntarcticomAppState extends ConsumerState<AntarcticomApp> {
         ),
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
-            TargetPlatform.windows: FadePageTransitionsBuilder(),
+            TargetPlatform.android: ZoomPageTransitionsBuilder(),
+            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.macOS: FadeUpwardsPageTransitionsBuilder(),
+            TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+            TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
           },
         ),
       ),
+      darkTheme: theme.materialTheme,
+      themeMode: ThemeMode.dark,
       routerConfig: router,
     );
   }

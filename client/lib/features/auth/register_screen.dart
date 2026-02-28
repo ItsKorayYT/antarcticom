@@ -30,6 +30,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    final theme = ref.watch(themeProvider);
 
     // Show error snackbar when auth error changes
     ref.listen<AuthState>(authProvider, (prev, next) {
@@ -45,17 +46,17 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     });
 
     return Scaffold(
-      backgroundColor: AntarcticomTheme.bgDeepest,
+      backgroundColor: theme.bgDeepest,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AntarcticomTheme.spacingXl),
           child: Container(
             constraints: const BoxConstraints(maxWidth: 400),
             decoration: BoxDecoration(
-              color: AntarcticomTheme.bgSecondary,
+              color: theme.bgSecondary,
               borderRadius: BorderRadius.circular(AntarcticomTheme.radiusLg),
               border: Border.all(
-                color: AntarcticomTheme.accentPrimary.withValues(alpha: 0.1),
+                color: theme.accentPrimary.withValues(alpha: 0.1),
               ),
             ),
             padding: const EdgeInsets.all(AntarcticomTheme.spacingXl),
@@ -65,7 +66,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 // Brand
                 ShaderMask(
                   shaderCallback: (bounds) =>
-                      AntarcticomTheme.accentGradient.createShader(bounds),
+                      theme.accentGradient.createShader(bounds),
                   child: const Text(
                     'ANTARCTICOM',
                     style: TextStyle(
@@ -86,12 +87,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 // Username
                 TextField(
                   controller: _usernameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Username',
                     prefixIcon: Icon(Icons.alternate_email,
-                        color: AntarcticomTheme.textMuted, size: 20),
+                        color: theme.textMuted, size: 20),
                   ),
-                  style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  style: TextStyle(color: theme.textPrimary),
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingMd),
@@ -99,12 +100,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 // Display name
                 TextField(
                   controller: _displayNameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Display Name (optional)',
                     prefixIcon: Icon(Icons.badge_outlined,
-                        color: AntarcticomTheme.textMuted, size: 20),
+                        color: theme.textMuted, size: 20),
                   ),
-                  style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  style: TextStyle(color: theme.textPrimary),
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingMd),
@@ -113,12 +114,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Password',
                     prefixIcon: Icon(Icons.lock_outline,
-                        color: AntarcticomTheme.textMuted, size: 20),
+                        color: theme.textMuted, size: 20),
                   ),
-                  style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  style: TextStyle(color: theme.textPrimary),
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingMd),
@@ -127,12 +128,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 TextField(
                   controller: _confirmPasswordController,
                   obscureText: true,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Confirm Password',
                     prefixIcon: Icon(Icons.lock_outline,
-                        color: AntarcticomTheme.textMuted, size: 20),
+                        color: theme.textMuted, size: 20),
                   ),
-                  style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  style: TextStyle(color: theme.textPrimary),
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _handleRegister(),
                 ),
@@ -144,7 +145,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                   height: 48,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: AntarcticomTheme.accentGradient,
+                      gradient: theme.accentGradient,
                       borderRadius:
                           BorderRadius.circular(AntarcticomTheme.radiusMd),
                     ),
@@ -173,14 +174,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 TextButton(
                   onPressed: () => context.go('/login'),
                   child: RichText(
-                    text: const TextSpan(
+                    text: TextSpan(
                       text: 'Already have an account? ',
-                      style: TextStyle(color: AntarcticomTheme.textMuted),
+                      style: TextStyle(color: theme.textMuted),
                       children: [
                         TextSpan(
                           text: 'Log in',
                           style: TextStyle(
-                            color: AntarcticomTheme.accentSecondary,
+                            color: theme.accentSecondary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),

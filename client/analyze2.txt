@@ -1,0 +1,53 @@
+﻿Analyzing client...                                             
+
+   info - Use 'const' with the constructor to improve performance - lib\core\theme.dart:166:29 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\core\theme.dart:172:28 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\core\theme.dart:190:25 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\core\theme.dart:196:24 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\core\theme.dart:214:26 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\core\theme.dart:224:22 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\core\theme.dart:260:20 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\core\theme.dart:274:22 - prefer_const_constructors
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:689:14 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:703:27 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:730:28 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:747:22 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:752:22 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:766:22 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:771:22 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:840:24 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:893:28 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:895:39 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:902:28 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:908:41 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:912:40 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:918:30 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:928:43 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:959:34 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1023:38 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1044:31 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1047:31 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1060:35 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1068:37 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1110:32 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1118:24 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1127:36 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1177:19 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1188:23 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1189:23 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1200:27 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1201:27 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1243:19 - undefined_identifier
+  error - Undefined name 'theme' - lib\features\home\home_screen.dart:1249:45 - undefined_identifier
+   info - Use 'const' with the constructor to improve performance - lib\features\settings\settings_screen.dart:222:16 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\settings\settings_screen.dart:224:16 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\settings\settings_screen.dart:226:16 - prefer_const_constructors
+   info - Use 'const' with the constructor to improve performance - lib\features\settings\settings_screen.dart:228:16 - prefer_const_constructors
+   info - Parameter 'key' could be a super parameter - lib\features\settings\settings_screen.dart:237:9 - use_super_parameters
+   info - Parameter 'key' could be a super parameter - lib\features\settings\settings_screen.dart:273:9 - use_super_parameters
+   info - Parameter 'key' could be a super parameter - lib\features\settings\settings_screen.dart:322:9 - use_super_parameters
+   info - Parameter 'key' could be a super parameter - lib\features\settings\settings_screen.dart:469:9 - use_super_parameters
+   info - Use 'const' literals as arguments to constructors of '@immutable' classes - lib\features\settings\settings_screen.dart:530:29 - prefer_const_literals_to_create_immutables
+   info - Parameter 'key' could be a super parameter - lib\features\settings\settings_screen.dart:737:9 - use_super_parameters
+   info - Parameter 'key' could be a super parameter - lib\features\settings\settings_screen.dart:789:9 - use_super_parameters
+

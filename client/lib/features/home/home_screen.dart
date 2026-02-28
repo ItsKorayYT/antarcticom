@@ -48,6 +48,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final channels = ref.watch(channelsProvider);
     final selectedChannelId = ref.watch(selectedChannelIdProvider);
     final settings = ref.watch(settingsProvider);
+    final theme = ref.watch(themeProvider);
 
     // Auto-select the first server once loaded
     if (!_didAutoSelect &&
@@ -91,8 +92,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return Container(
         width: vertical ? 80 : null,
         height: vertical ? null : 64,
-        color: AntarcticomTheme.bgSecondary
-            .withValues(alpha: settings.sidebarOpacity),
+        color: theme.bgSecondary.withValues(alpha: settings.sidebarOpacity),
         child: vertical
             ? Column(
                 children: [
@@ -124,8 +124,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Widget buildSidebar() {
       return Container(
         width: 240,
-        color: AntarcticomTheme.bgSecondary
-            .withValues(alpha: settings.sidebarOpacity),
+        color: theme.bgSecondary.withValues(alpha: settings.sidebarOpacity),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -137,7 +136,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               // decoration: BoxDecoration(
               //   border: Border(
               //     bottom: BorderSide(
-              //       color: AntarcticomTheme.bgDeepest.withOpacity(0.5),
+              //       color: theme.bgDeepest.withOpacity(0.5),
               //     ),
               //   ),
               // ),
@@ -177,8 +176,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             server != null && server.ownerId == auth.user?.id;
 
                         return PopupMenuButton<String>(
-                          icon: const Icon(Icons.expand_more,
-                              color: AntarcticomTheme.textPrimary),
+                          icon:
+                              Icon(Icons.expand_more, color: theme.textPrimary),
                           onSelected: (value) async {
                             if (value == 'roles') {
                               Navigator.of(context).push(
@@ -277,8 +276,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Widget buildContent() {
       return Expanded(
         child: Container(
-          color: AntarcticomTheme.bgPrimary
-              .withValues(alpha: settings.backgroundOpacity),
+          color: theme.bgPrimary.withValues(alpha: settings.backgroundOpacity),
           child: widget.child,
         ),
       );
@@ -351,7 +349,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: AntarcticomTheme.bgDeepest,
+      backgroundColor: theme.bgDeepest,
       body: Stack(
         children: [
           // Background
@@ -385,11 +383,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildDivider({required bool vertical}) {
+    final theme = ref.watch(themeProvider);
     return Container(
       width: vertical ? 32 : 2,
       height: vertical ? 2 : 32,
       decoration: BoxDecoration(
-        color: AntarcticomTheme.bgTertiary.withValues(alpha: 0.5),
+        color: theme.bgTertiary.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(1),
       ),
     );
@@ -397,14 +396,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildServerList(ServersState servers, String? selectedServerId,
       {bool vertical = true}) {
+    final theme = ref.watch(themeProvider);
     if (servers.isLoading) {
-      return const Center(
+      return Center(
         child: SizedBox(
           width: 24,
           height: 24,
           child: CircularProgressIndicator(
             strokeWidth: 2,
-            color: AntarcticomTheme.accentPrimary,
+            color: theme.accentPrimary,
           ),
         ),
       );
@@ -435,18 +435,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 width: vertical ? 56 : 48,
                 height: vertical ? 56 : 48,
                 decoration: BoxDecoration(
-                  color: AntarcticomTheme.bgTertiary,
+                  color: theme.bgTertiary,
                   borderRadius: BorderRadius.circular(vertical ? 16 : 12),
                   border: Border.all(
-                    color:
-                        AntarcticomTheme.accentPrimary.withValues(alpha: 0.3),
+                    color: theme.accentPrimary.withValues(alpha: 0.3),
                     width: 1.5,
                   ),
                 ),
-                child: const Center(
+                child: Center(
                   child: Icon(
                     Icons.add,
-                    color: AntarcticomTheme.accentPrimary,
+                    color: theme.accentPrimary,
                     size: 24,
                   ),
                 ),
@@ -463,12 +462,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       String? selectedServerId,
       ChannelsState channels,
       String? selectedChannelId) {
+    final theme = ref.watch(themeProvider);
     if (selectedServerId == null) {
       return _buildWelcomeState(servers);
     }
     if (channels.isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: AntarcticomTheme.accentPrimary),
+      return Center(
+        child: CircularProgressIndicator(color: theme.accentPrimary),
       );
     }
     return ListView(
@@ -516,18 +516,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   padding: const EdgeInsets.only(left: 28.0, top: 1, bottom: 1),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.person,
                         size: 14,
-                        color: AntarcticomTheme.textMuted,
+                        color: theme.textMuted,
                       ),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           p.displayName ?? p.userId.substring(0, 8),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AntarcticomTheme.textSecondary,
+                            color: theme.textSecondary,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -552,23 +552,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildWelcomeState(ServersState servers) {
     // Show "Select a server" + Online People
-
+    final theme = ref.watch(themeProvider);
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.explore,
             size: 64,
-            color: AntarcticomTheme.bgTertiary,
+            color: theme.bgTertiary,
           ),
           const SizedBox(height: AntarcticomTheme.spacingMd),
           Text(
             servers.servers.isEmpty
                 ? 'Create or join a server to get started!'
                 : 'Select a server or direct message from the taskbar',
-            style: const TextStyle(
-                color: AntarcticomTheme.textMuted, fontSize: 14),
+            style: TextStyle(color: theme.textMuted, fontSize: 14),
             textAlign: TextAlign.center,
           ),
         ],
@@ -577,6 +576,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildVoiceStatusPanel() {
+    final theme = ref.watch(themeProvider);
     final voiceState = ref.watch(voiceProvider);
     if (voiceState.currentChannelId == null) {
       return const SizedBox.shrink();
@@ -596,10 +596,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         vertical: 6,
       ),
       decoration: BoxDecoration(
-        color: AntarcticomTheme.bgTertiary,
+        color: theme.bgTertiary,
         border: Border(
           top: BorderSide(
-            color: AntarcticomTheme.accentPrimary.withValues(alpha: 0.3),
+            color: theme.accentPrimary.withValues(alpha: 0.3),
           ),
         ),
       ),
@@ -607,19 +607,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: "Voice Connected"
-          const Row(
+          // Header: "Voice Connected" or "Connecting..."
+          Row(
             children: [
-              Icon(Icons.signal_cellular_alt,
-                  size: 14, color: AntarcticomTheme.online),
-              SizedBox(width: 6),
+              Icon(
+                  voiceState.isConnecting
+                      ? Icons.signal_cellular_alt_1_bar
+                      : Icons.signal_cellular_alt,
+                  size: 14,
+                  color: voiceState.isConnecting
+                      ? Colors.orangeAccent
+                      : theme.online),
+              const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  'Voice Connected',
+                  voiceState.isConnecting
+                      ? 'Voice Connecting...'
+                      : 'Voice Connected',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: AntarcticomTheme.online,
+                    color: voiceState.isConnecting
+                        ? Colors.orangeAccent
+                        : theme.online,
                   ),
                 ),
               ),
@@ -630,9 +640,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             padding: const EdgeInsets.only(left: 20),
             child: Text(
               channelName,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: AntarcticomTheme.textSecondary,
+                color: theme.textSecondary,
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -672,12 +682,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildUserPanel(
       User? user, BuildContext context, AppSettings settings) {
+    final theme = ref.watch(themeProvider);
     return Container(
       height: 52,
       padding:
           const EdgeInsets.symmetric(horizontal: AntarcticomTheme.spacingSm),
-      color: AntarcticomTheme.bgSecondary
-          .withValues(alpha: settings.sidebarOpacity),
+      color: theme.bgSecondary.withValues(alpha: settings.sidebarOpacity),
       child: Row(
         children: [
           RainbowBuilder(
@@ -690,7 +700,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     gradient: settings.rainbowMode
                         ? LinearGradient(
                             colors: [color, color.withValues(alpha: 0.7)])
-                        : AntarcticomTheme.accentGradient,
+                        : theme.accentGradient,
                     borderRadius:
                         BorderRadius.circular(AntarcticomTheme.radiusFull),
                   ),
@@ -717,7 +727,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Text(
                   user?.displayName ?? 'User',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: AntarcticomTheme.textPrimary,
+                    color: theme.textPrimary,
                     shadows: const [
                       Shadow(
                         color: Color(0xCC000000),
@@ -733,13 +743,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Container(
             width: 32,
             height: 32,
-            decoration: const BoxDecoration(
-              color: AntarcticomTheme.bgTertiary,
+            decoration: BoxDecoration(
+              color: theme.bgTertiary,
               shape: BoxShape.circle,
             ),
             child: IconButton(
               icon: const Icon(Icons.settings, size: 16),
-              color: AntarcticomTheme.textSecondary,
+              color: theme.textSecondary,
               padding: EdgeInsets.zero,
               onPressed: () {
                 context.push('/settings');
@@ -752,13 +762,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           Container(
             width: 32,
             height: 32,
-            decoration: const BoxDecoration(
-              color: AntarcticomTheme.bgTertiary,
+            decoration: BoxDecoration(
+              color: theme.bgTertiary,
               shape: BoxShape.circle,
             ),
             child: IconButton(
               icon: const Icon(Icons.logout, size: 16),
-              color: AntarcticomTheme.textSecondary,
+              color: theme.textSecondary,
               padding: EdgeInsets.zero,
               onPressed: () async {
                 await ref.read(authProvider.notifier).logout();
@@ -824,10 +834,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       String channelId, String channelName) {
     final perms = ref.read(permissionsProvider(serverId));
     if (!perms.has(Permissions.manageChannels)) return;
+    final theme = ref.read(themeProvider);
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AntarcticomTheme.bgSecondary,
+      backgroundColor: theme.bgSecondary,
       builder: (ctx) {
         return SafeArea(
           child: Column(
@@ -875,37 +886,36 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final controller = TextEditingController();
     String? errorText;
     bool isLoading = false;
+    final theme = ref.read(themeProvider);
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: AntarcticomTheme.bgSecondary,
-          title: const Text('Add Community Server',
-              style: TextStyle(color: AntarcticomTheme.textPrimary)),
+          backgroundColor: theme.bgSecondary,
+          title: Text('Add Community Server',
+              style: TextStyle(color: theme.textPrimary)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'Enter the IP address or domain of a community server.',
-                style: TextStyle(
-                    color: AntarcticomTheme.textSecondary, fontSize: 13),
+                style: TextStyle(color: theme.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: controller,
                 autofocus: true,
-                style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                style: TextStyle(color: theme.textPrimary),
                 decoration: InputDecoration(
                   hintText: 'e.g. myserver.com',
-                  hintStyle:
-                      const TextStyle(color: AntarcticomTheme.textSecondary),
+                  hintStyle: TextStyle(color: theme.textSecondary),
                   errorText: errorText,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                   filled: true,
-                  fillColor: AntarcticomTheme.bgPrimary,
+                  fillColor: theme.bgPrimary,
                 ),
                 onSubmitted: (_) {},
               ),
@@ -914,8 +924,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel',
-                  style: TextStyle(color: AntarcticomTheme.textSecondary)),
+              child:
+                  Text('Cancel', style: TextStyle(color: theme.textSecondary)),
             ),
             FilledButton(
               onPressed: isLoading
@@ -946,7 +956,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       }
                     },
               style: FilledButton.styleFrom(
-                backgroundColor: AntarcticomTheme.accentPrimary,
+                backgroundColor: theme.accentPrimary,
               ),
               child: isLoading
                   ? const SizedBox(
@@ -1004,13 +1014,14 @@ class _ServerIconState extends State<_ServerIcon> {
     // Let's Refactor `_ServerIcon` to be a ConsumerWidget or read settings.
     return Consumer(builder: (context, ref, _) {
       final settings = ref.watch(settingsProvider);
+      final theme = ref.watch(themeProvider);
       return RainbowBuilder(
         enabled: settings.rainbowMode,
         builder: (context, rainbowColor) {
           final effectiveColor =
               settings.rainbowMode && (widget.isHome || widget.color != null)
                   ? rainbowColor
-                  : (widget.color ?? AntarcticomTheme.bgTertiary);
+                  : (widget.color ?? theme.bgTertiary);
 
           return Padding(
             padding: const EdgeInsets.symmetric(
@@ -1029,12 +1040,8 @@ class _ServerIconState extends State<_ServerIcon> {
                   height: 48,
                   decoration: BoxDecoration(
                     color: widget.isHome
-                        ? (isActive
-                            ? effectiveColor
-                            : AntarcticomTheme.bgTertiary)
-                        : (isActive
-                            ? effectiveColor
-                            : AntarcticomTheme.bgTertiary),
+                        ? (isActive ? effectiveColor : theme.bgTertiary)
+                        : (isActive ? effectiveColor : theme.bgTertiary),
                     borderRadius: BorderRadius.circular(
                       isActive
                           ? AntarcticomTheme.radiusMd
@@ -1045,17 +1052,15 @@ class _ServerIconState extends State<_ServerIcon> {
                     child: widget.isHome
                         ? Icon(
                             Icons.home_rounded,
-                            color: isActive
-                                ? Colors.white
-                                : AntarcticomTheme.textSecondary,
+                            color:
+                                isActive ? Colors.white : theme.textSecondary,
                             size: 24,
                           )
                         : Text(
                             widget.label ?? '',
                             style: TextStyle(
-                              color: isActive
-                                  ? Colors.white
-                                  : AntarcticomTheme.textPrimary,
+                              color:
+                                  isActive ? Colors.white : theme.textPrimary,
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
                             ),
@@ -1082,6 +1087,7 @@ class _ChannelCategory extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
     bool canAdd = false;
     if (serverId != null) {
       final perms = ref.watch(permissionsProvider(serverId!));
@@ -1096,16 +1102,15 @@ class _ChannelCategory extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.expand_more,
-              size: 10, color: AntarcticomTheme.textMuted),
+          Icon(Icons.expand_more, size: 10, color: theme.textMuted),
           const SizedBox(width: 4),
           Expanded(
             child: Text(
               name,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: AntarcticomTheme.textMuted,
+                color: theme.textMuted,
                 letterSpacing: 0.5,
               ),
             ),
@@ -1113,8 +1118,7 @@ class _ChannelCategory extends ConsumerWidget {
           if (canAdd && onAdd != null)
             InkWell(
               onTap: onAdd,
-              child: const Icon(Icons.add,
-                  size: 14, color: AntarcticomTheme.textPrimary),
+              child: Icon(Icons.add, size: 14, color: theme.textPrimary),
             ),
           const SizedBox(width: 8),
         ],
@@ -1123,7 +1127,7 @@ class _ChannelCategory extends ConsumerWidget {
   }
 }
 
-class _ChannelItem extends StatefulWidget {
+class _ChannelItem extends ConsumerStatefulWidget {
   final String name;
   final IconData icon;
   final bool isActive;
@@ -1140,14 +1144,15 @@ class _ChannelItem extends StatefulWidget {
     this.onDelete,
   });
   @override
-  State<_ChannelItem> createState() => _ChannelItemState();
+  ConsumerState<_ChannelItem> createState() => _ChannelItemState();
 }
 
-class _ChannelItemState extends State<_ChannelItem> {
+class _ChannelItemState extends ConsumerState<_ChannelItem> {
   bool _hovering = false;
   @override
   Widget build(BuildContext context) {
     final isHighlighted = widget.isActive || _hovering;
+    final theme = ref.watch(themeProvider);
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
@@ -1164,8 +1169,7 @@ class _ChannelItemState extends State<_ChannelItem> {
           ),
           decoration: BoxDecoration(
             color: isHighlighted
-                ? AntarcticomTheme.bgHover
-                    .withValues(alpha: widget.isActive ? 1.0 : 0.6)
+                ? theme.bgHover.withValues(alpha: widget.isActive ? 1.0 : 0.6)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(AntarcticomTheme.radiusSm),
           ),
@@ -1174,9 +1178,7 @@ class _ChannelItemState extends State<_ChannelItem> {
               Icon(
                 widget.icon,
                 size: 18,
-                color: isHighlighted
-                    ? AntarcticomTheme.textPrimary
-                    : AntarcticomTheme.textMuted,
+                color: isHighlighted ? theme.textPrimary : theme.textMuted,
               ),
               const SizedBox(width: AntarcticomTheme.spacingSm),
               Expanded(
@@ -1186,9 +1188,8 @@ class _ChannelItemState extends State<_ChannelItem> {
                     fontSize: 14,
                     fontWeight:
                         widget.isActive ? FontWeight.w600 : FontWeight.w400,
-                    color: isHighlighted
-                        ? AntarcticomTheme.textPrimary
-                        : AntarcticomTheme.textSecondary,
+                    color:
+                        isHighlighted ? theme.textPrimary : theme.textSecondary,
                   ),
                 ),
               ),
@@ -1202,7 +1203,7 @@ class _ChannelItemState extends State<_ChannelItem> {
 
 // ─── Voice Control Button ───────────────────────────────────────────────
 
-class _VoiceControlButton extends StatelessWidget {
+class _VoiceControlButton extends ConsumerWidget {
   final IconData icon;
   final bool isActive;
   final VoidCallback onTap;
@@ -1218,7 +1219,8 @@ class _VoiceControlButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
     return Tooltip(
       message: tooltip,
       child: InkWell(
@@ -1228,15 +1230,14 @@ class _VoiceControlButton extends StatelessWidget {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: isActive
-                ? activeColor.withValues(alpha: 0.2)
-                : AntarcticomTheme.bgPrimary,
+            color:
+                isActive ? activeColor.withValues(alpha: 0.2) : theme.bgPrimary,
             shape: BoxShape.circle,
           ),
           child: Icon(
             icon,
             size: 16,
-            color: isActive ? activeColor : AntarcticomTheme.textSecondary,
+            color: isActive ? activeColor : theme.textSecondary,
           ),
         ),
       ),

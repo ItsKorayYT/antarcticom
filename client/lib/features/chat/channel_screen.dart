@@ -57,6 +57,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
   Widget build(BuildContext context) {
     final msgState = ref.watch(messagesProvider);
     final auth = ref.watch(authProvider);
+    final theme = ref.watch(themeProvider);
     final channelsState = ref.watch(channelsProvider);
     final settings = ref.watch(settingsProvider);
     final serversState = ref.watch(serversProvider);
@@ -78,19 +79,17 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
           padding: const EdgeInsets.symmetric(
               horizontal: AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color: AntarcticomTheme.bgPrimary
-                .withValues(alpha: settings.sidebarOpacity),
+            color: theme.bgPrimary.withValues(alpha: settings.sidebarOpacity),
           ),
           child: Row(
             children: [
-              const Icon(Icons.tag,
-                  size: 20, color: AntarcticomTheme.textMuted),
+              Icon(Icons.tag, size: 20, color: theme.textMuted),
               const SizedBox(width: AntarcticomTheme.spacingSm),
               Text(
                 channelName,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w700,
-                      color: AntarcticomTheme.textPrimary,
+                      color: theme.textPrimary,
                     ),
               ),
             ],
@@ -107,7 +106,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                         return CircularProgressIndicator(
                           color: settings.rainbowMode
                               ? color
-                              : AntarcticomTheme.accentPrimary,
+                              : theme.accentPrimary,
                         );
                       }),
                 )
@@ -116,13 +115,12 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.error_outline,
-                              color: AntarcticomTheme.textMuted, size: 48),
+                          Icon(Icons.error_outline,
+                              color: theme.textMuted, size: 48),
                           const SizedBox(height: AntarcticomTheme.spacingSm),
                           Text(
                             msgState.error!,
-                            style: const TextStyle(
-                                color: AntarcticomTheme.textMuted),
+                            style: TextStyle(color: theme.textMuted),
                           ),
                           const SizedBox(height: AntarcticomTheme.spacingMd),
                           TextButton(
@@ -135,30 +133,29 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                       ),
                     )
                   : msgState.messages.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(Icons.chat_bubble_outline,
-                                  color: AntarcticomTheme.textMuted, size: 48),
-                              SizedBox(height: AntarcticomTheme.spacingSm),
+                                  color: theme.textMuted, size: 48),
+                              const SizedBox(
+                                  height: AntarcticomTheme.spacingSm),
                               Text(
                                 'No messages yet',
-                                style: TextStyle(
-                                    color: AntarcticomTheme.textMuted),
+                                style: TextStyle(color: theme.textMuted),
                               ),
-                              SizedBox(height: 4),
+                              const SizedBox(height: 4),
                               Text(
                                 'Be the first to say something!',
                                 style: TextStyle(
-                                    color: AntarcticomTheme.textMuted,
-                                    fontSize: 12),
+                                    color: theme.textMuted, fontSize: 12),
                               ),
                             ],
                           ),
                         )
                       : Container(
-                          color: AntarcticomTheme.bgPrimary
+                          color: theme.bgPrimary
                               .withValues(alpha: settings.backgroundOpacity),
                           child: ListView.builder(
                             controller: _scrollController,
@@ -192,25 +189,23 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
         Container(
           padding: const EdgeInsets.all(AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color: AntarcticomTheme.bgPrimary
-                .withValues(alpha: settings.sidebarOpacity),
+            color: theme.bgPrimary.withValues(alpha: settings.sidebarOpacity),
           ),
           child: Row(
             children: [
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: AntarcticomTheme.bgTertiary.withValues(alpha: 0.8),
+                    color: theme.bgTertiary.withValues(alpha: 0.8),
                     borderRadius:
                         BorderRadius.circular(AntarcticomTheme.radiusMd),
                   ),
                   child: TextField(
                     controller: _messageController,
-                    style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                    style: TextStyle(color: theme.textPrimary),
                     decoration: InputDecoration(
                       hintText: 'Message #$channelName',
-                      hintStyle:
-                          const TextStyle(color: AntarcticomTheme.textMuted),
+                      hintStyle: TextStyle(color: theme.textMuted),
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: AntarcticomTheme.spacingMd,
@@ -237,7 +232,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                                   strokeWidth: 2,
                                   color: settings.rainbowMode
                                       ? color
-                                      : AntarcticomTheme.accentPrimary),
+                                      : theme.accentPrimary),
                             )
                           : const Icon(Icons.send_rounded),
                       color:
@@ -298,10 +293,10 @@ class _MessageBubble extends ConsumerWidget {
     required this.onDelete,
   });
 
-  void _showOptions(BuildContext context) {
+  void _showOptions(BuildContext context, AppThemeData theme) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AntarcticomTheme.bgSecondary,
+      backgroundColor: theme.bgSecondary,
       builder: (context) {
         return SafeArea(
           child: Column(
@@ -325,6 +320,8 @@ class _MessageBubble extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
+
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AntarcticomTheme.spacingMd,
@@ -332,7 +329,7 @@ class _MessageBubble extends ConsumerWidget {
       ),
       child: GestureDetector(
         onLongPress: canDelete && !message.isDeleted
-            ? () => _showOptions(context)
+            ? () => _showOptions(context, theme)
             : null,
         child: MouseRegion(
           child: Container(
@@ -373,7 +370,7 @@ class _MessageBubble extends ConsumerWidget {
                     height: 36,
                     decoration: BoxDecoration(
                       gradient: isOwn
-                          ? AntarcticomTheme.accentGradient
+                          ? theme.accentGradient
                           : const LinearGradient(
                               colors: [Color(0xFF7C4DFF), Color(0xFF448AFF)],
                             ),
@@ -406,7 +403,7 @@ class _MessageBubble extends ConsumerWidget {
                             authorName,
                             style: TextStyle(
                               color: isOwn
-                                  ? AntarcticomTheme.accentSecondary
+                                  ? theme.accentSecondary
                                   : const Color(0xFF7C8CFF),
                               fontWeight: FontWeight.w600,
                               fontSize: 14,
@@ -415,8 +412,8 @@ class _MessageBubble extends ConsumerWidget {
                           const SizedBox(width: AntarcticomTheme.spacingSm),
                           Text(
                             message.formattedTime,
-                            style: const TextStyle(
-                              color: AntarcticomTheme.textMuted,
+                            style: TextStyle(
+                              color: theme.textMuted,
                               fontSize: 11,
                             ),
                           ),
@@ -424,10 +421,10 @@ class _MessageBubble extends ConsumerWidget {
                       ),
                       const SizedBox(height: 2),
                       if (message.isDeleted)
-                        const Text(
+                        Text(
                           'Message deleted',
                           style: TextStyle(
-                            color: AntarcticomTheme.textMuted,
+                            color: theme.textMuted,
                             fontSize: 14,
                             height: 1.4,
                             fontStyle: FontStyle.italic,
@@ -436,8 +433,8 @@ class _MessageBubble extends ConsumerWidget {
                       else
                         Text(
                           message.content,
-                          style: const TextStyle(
-                            color: AntarcticomTheme.textPrimary,
+                          style: TextStyle(
+                            color: theme.textPrimary,
                             fontSize: 14,
                             height: 1.4,
                           ),

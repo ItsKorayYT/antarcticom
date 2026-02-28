@@ -111,6 +111,9 @@ pub struct Channel {
     pub channel_type: ChannelType,
     pub position: i32,
     pub category_id: Option<Uuid>,
+    #[sqlx(skip)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voice_participants: Option<Vec<VoiceParticipant>>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -23,8 +23,18 @@ async fn main() -> Result<()> {
     let config = AppConfig::load()?;
 
     // Initialize logging
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new(&config.logging.level));
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        let level = &config.logging.level;
+        if !level.contains('=') && !level.contains(',') {
+            // Apply aggressive filtering to noisy WebRTC crates if only a base level is given
+            EnvFilter::new(format!(
+                "{},webrtc=warn,webrtc_ice=warn,webrtc_mdns=warn,webrtc_sctp=warn,webrtc_dtls=warn",
+                level
+            ))
+        } else {
+            EnvFilter::new(level)
+        }
+    });
 
     match config.logging.format.as_str() {
         "json" => {

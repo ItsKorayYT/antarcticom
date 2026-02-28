@@ -22,10 +22,11 @@ class MemberList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final membersAsync = ref.watch(serverMembersProvider(serverId));
+    final theme = ref.watch(themeProvider);
 
     return Container(
       width: isMobile ? null : 240,
-      color: AntarcticomTheme.bgSecondary,
+      color: theme.bgSecondary,
       child: membersAsync.when(
         data: (members) {
           // Group by status
@@ -51,13 +52,13 @@ class MemberList extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: 8),
             children: [
               if (online.isNotEmpty) ...[
-                _buildCategoryHeader('ONLINE — ${online.length}'),
+                _buildCategoryHeader('ONLINE — ${online.length}', theme),
                 ...online.map((m) => _MemberItem(member: m)),
               ],
               if (online.isNotEmpty && offline.isNotEmpty)
                 const SizedBox(height: 16),
               if (offline.isNotEmpty) ...[
-                _buildCategoryHeader('OFFLINE — ${offline.length}'),
+                _buildCategoryHeader('OFFLINE — ${offline.length}', theme),
                 ...offline.map((m) => _MemberItem(member: m)),
               ],
             ],
@@ -69,13 +70,13 @@ class MemberList extends ConsumerWidget {
     );
   }
 
-  Widget _buildCategoryHeader(String title) {
+  Widget _buildCategoryHeader(String title, AppThemeData theme) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 8, 4),
       child: Text(
         title,
-        style: const TextStyle(
-          color: AntarcticomTheme.textMuted,
+        style: TextStyle(
+          color: theme.textMuted,
           fontSize: 12,
           fontWeight: FontWeight.bold,
         ),
@@ -140,7 +141,8 @@ class _MemberItem extends ConsumerWidget {
       bool canManageRoles,
       bool targetIsAdmin,
       bool isSelf,
-      bool targetIsOwner) {
+      bool targetIsOwner,
+      AppThemeData theme) {
     final user = member.user;
     final name =
         member.nickname ?? user?.displayName ?? user?.username ?? 'Unknown';
@@ -167,7 +169,7 @@ class _MemberItem extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: AntarcticomTheme.bgSecondary,
+        backgroundColor: theme.bgSecondary,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
         ),
@@ -181,9 +183,9 @@ class _MemberItem extends ConsumerWidget {
                 // Banner area
                 Container(
                   height: 60,
-                  decoration: const BoxDecoration(
-                    gradient: AntarcticomTheme.accentGradient,
-                    borderRadius: BorderRadius.only(
+                  decoration: BoxDecoration(
+                    gradient: theme.accentGradient,
+                    borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(AntarcticomTheme.radiusMd),
                       topRight: Radius.circular(AntarcticomTheme.radiusMd),
                     ),
@@ -200,7 +202,7 @@ class _MemberItem extends ConsumerWidget {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: AntarcticomTheme.bgSecondary,
+                            color: theme.bgSecondary,
                             width: 5,
                           ),
                         ),
@@ -214,8 +216,7 @@ class _MemberItem extends ConsumerWidget {
                                   errorBuilder: (context, error, stackTrace) =>
                                       CircleAvatar(
                                     radius: 36,
-                                    backgroundColor:
-                                        AntarcticomTheme.bgTertiary,
+                                    backgroundColor: theme.bgTertiary,
                                     child: Text(
                                       name[0].toUpperCase(),
                                       style: const TextStyle(
@@ -229,7 +230,7 @@ class _MemberItem extends ConsumerWidget {
                               )
                             : CircleAvatar(
                                 radius: 36,
-                                backgroundColor: AntarcticomTheme.bgTertiary,
+                                backgroundColor: theme.bgTertiary,
                                 child: Text(
                                   name[0].toUpperCase(),
                                   style: const TextStyle(
@@ -250,7 +251,7 @@ class _MemberItem extends ConsumerWidget {
                             color: statusColor,
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: AntarcticomTheme.bgSecondary,
+                              color: theme.bgSecondary,
                               width: 3,
                             ),
                           ),
@@ -273,8 +274,8 @@ class _MemberItem extends ConsumerWidget {
                           children: [
                             Text(
                               name,
-                              style: const TextStyle(
-                                color: AntarcticomTheme.textPrimary,
+                              style: TextStyle(
+                                color: theme.textPrimary,
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -292,11 +293,11 @@ class _MemberItem extends ConsumerWidget {
                               ),
                             ] else if (targetIsAdmin) ...[
                               const SizedBox(width: 8),
-                              const Tooltip(
+                              Tooltip(
                                 message: 'Server Admin',
                                 child: Icon(
                                   Icons.shield,
-                                  color: AntarcticomTheme.accentSecondary,
+                                  color: theme.accentSecondary,
                                   size: 20,
                                 ),
                               ),
@@ -306,15 +307,15 @@ class _MemberItem extends ConsumerWidget {
                         if (username.isNotEmpty)
                           Text(
                             '@$username',
-                            style: const TextStyle(
-                              color: AntarcticomTheme.textSecondary,
+                            style: TextStyle(
+                              color: theme.textSecondary,
                               fontSize: 14,
                             ),
                           ),
 
                         const SizedBox(height: 12),
-                        const Divider(
-                          color: AntarcticomTheme.bgTertiary,
+                        Divider(
+                          color: theme.bgTertiary,
                           height: 1,
                         ),
                         const SizedBox(height: 12),
@@ -333,8 +334,8 @@ class _MemberItem extends ConsumerWidget {
                             const SizedBox(width: 8),
                             Text(
                               statusLabel,
-                              style: const TextStyle(
-                                color: AntarcticomTheme.textPrimary,
+                              style: TextStyle(
+                                color: theme.textPrimary,
                                 fontSize: 13,
                               ),
                             ),
@@ -346,16 +347,16 @@ class _MemberItem extends ConsumerWidget {
                         // Member since
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.calendar_today,
                               size: 14,
-                              color: AntarcticomTheme.textMuted,
+                              color: theme.textMuted,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               'Member since $joinedDate',
-                              style: const TextStyle(
-                                color: AntarcticomTheme.textMuted,
+                              style: TextStyle(
+                                color: theme.textMuted,
                                 fontSize: 12,
                               ),
                             ),
@@ -452,6 +453,7 @@ class _MemberItem extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
     final user = member.user;
     final name =
         member.nickname ?? user?.displayName ?? user?.username ?? 'Unknown';
@@ -490,14 +492,14 @@ class _MemberItem extends ConsumerWidget {
                     height: 40,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => CircleAvatar(
-                      backgroundColor: AntarcticomTheme.bgTertiary,
+                      backgroundColor: theme.bgTertiary,
                       child: Text(name[0].toUpperCase(),
                           style: const TextStyle(color: Colors.white)),
                     ),
                   ),
                 )
               : CircleAvatar(
-                  backgroundColor: AntarcticomTheme.bgTertiary,
+                  backgroundColor: theme.bgTertiary,
                   child: Text(name[0].toUpperCase(),
                       style: const TextStyle(color: Colors.white)),
                 ),
@@ -510,8 +512,7 @@ class _MemberItem extends ConsumerWidget {
               decoration: BoxDecoration(
                 color: statusColor,
                 shape: BoxShape.circle,
-                border:
-                    Border.all(color: AntarcticomTheme.bgSecondary, width: 2),
+                border: Border.all(color: theme.bgSecondary, width: 2),
               ),
             ),
           ),
@@ -520,15 +521,14 @@ class _MemberItem extends ConsumerWidget {
       title: Text(
         name,
         style: TextStyle(
-          color: member.status == 'offline'
-              ? AntarcticomTheme.textMuted
-              : AntarcticomTheme.textPrimary,
+          color:
+              member.status == 'offline' ? theme.textMuted : theme.textPrimary,
         ),
       ),
       dense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16),
       onTap: () => _showUserProfile(context, ref, avatarUrl, canKick, canBan,
-          canManageRoles, targetIsAdmin, isSelf, targetIsOwner),
+          canManageRoles, targetIsAdmin, isSelf, targetIsOwner, theme),
     );
   }
 }
@@ -547,10 +547,11 @@ class _RoleManagerDialogState extends ConsumerState<_RoleManagerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
     final rolesState = ref.watch(rolesProvider(widget.member.serverId));
 
     return Dialog(
-      backgroundColor: AntarcticomTheme.bgSecondary,
+      backgroundColor: theme.bgSecondary,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
       ),
@@ -562,10 +563,10 @@ class _RoleManagerDialogState extends ConsumerState<_RoleManagerDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Manage Roles',
                 style: TextStyle(
-                  color: AntarcticomTheme.textPrimary,
+                  color: theme.textPrimary,
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
@@ -583,10 +584,10 @@ class _RoleManagerDialogState extends ConsumerState<_RoleManagerDialog> {
               else if (rolesState.roles
                   .where((r) => r.name != '@everyone')
                   .isEmpty)
-                const Center(
+                Center(
                   child: Text(
                     'No custom roles found.',
-                    style: TextStyle(color: AntarcticomTheme.textSecondary),
+                    style: TextStyle(color: theme.textSecondary),
                   ),
                 )
               else
@@ -616,7 +617,7 @@ class _RoleManagerDialogState extends ConsumerState<_RoleManagerDialog> {
                           ),
                         ),
                         value: hasRole,
-                        activeColor: AntarcticomTheme.accentPrimary,
+                        activeColor: theme.accentPrimary,
                         checkColor: Colors.white,
                         onChanged: isProcessing
                             ? null

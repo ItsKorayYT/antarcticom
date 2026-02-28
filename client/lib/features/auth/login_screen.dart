@@ -42,6 +42,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    final theme = ref.watch(themeProvider);
 
     // Show error snackbar when auth error changes
     ref.listen<AuthState>(authProvider, (prev, next) {
@@ -57,7 +58,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
     });
 
     return Scaffold(
-      backgroundColor: AntarcticomTheme.bgDeepest,
+      backgroundColor: theme.bgDeepest,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AntarcticomTheme.spacingXl),
@@ -67,15 +68,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
               return Container(
                 constraints: const BoxConstraints(maxWidth: 400),
                 decoration: BoxDecoration(
-                  color: AntarcticomTheme.bgSecondary,
-                  borderRadius: BorderRadius.circular(AntarcticomTheme.radiusLg),
+                  color: theme.bgSecondary,
+                  borderRadius:
+                      BorderRadius.circular(AntarcticomTheme.radiusLg),
                   border: Border.all(
-                    color: AntarcticomTheme.accentPrimary
+                    color: theme.accentPrimary
                         .withValues(alpha: _glowAnimation.value * 0.3),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: AntarcticomTheme.accentPrimary
+                      color: theme.accentPrimary
                           .withValues(alpha: _glowAnimation.value * 0.1),
                       blurRadius: 40,
                       spreadRadius: -10,
@@ -92,7 +94,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 // Logo / Brand
                 ShaderMask(
                   shaderCallback: (bounds) =>
-                      AntarcticomTheme.accentGradient.createShader(bounds),
+                      theme.accentGradient.createShader(bounds),
                   child: const Text(
                     'ANTARCTICOM',
                     style: TextStyle(
@@ -113,12 +115,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 // Username field
                 TextField(
                   controller: _usernameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Username',
                     prefixIcon: Icon(Icons.person_outline,
-                        color: AntarcticomTheme.textMuted, size: 20),
+                        color: theme.textMuted, size: 20),
                   ),
-                  style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  style: TextStyle(color: theme.textPrimary),
                   textInputAction: TextInputAction.next,
                 ),
                 const SizedBox(height: AntarcticomTheme.spacingMd),
@@ -127,12 +129,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 TextField(
                   controller: _passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Password',
                     prefixIcon: Icon(Icons.lock_outline,
-                        color: AntarcticomTheme.textMuted, size: 20),
+                        color: theme.textMuted, size: 20),
                   ),
-                  style: const TextStyle(color: AntarcticomTheme.textPrimary),
+                  style: TextStyle(color: theme.textPrimary),
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _handleLogin(),
                 ),
@@ -144,7 +146,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                   height: 48,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: AntarcticomTheme.accentGradient,
+                      gradient: theme.accentGradient,
                       borderRadius:
                           BorderRadius.circular(AntarcticomTheme.radiusMd),
                     ),
@@ -173,14 +175,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 TextButton(
                   onPressed: () => context.go('/register'),
                   child: RichText(
-                    text: const TextSpan(
+                    text: TextSpan(
                       text: "Don't have an account? ",
-                      style: TextStyle(color: AntarcticomTheme.textMuted),
+                      style: TextStyle(color: theme.textMuted),
                       children: [
                         TextSpan(
                           text: 'Register',
                           style: TextStyle(
-                            color: AntarcticomTheme.accentSecondary,
+                            color: theme.accentSecondary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -210,7 +212,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
       return;
     }
 
-    final success = await ref.read(authProvider.notifier).login(username, password);
+    final success =
+        await ref.read(authProvider.notifier).login(username, password);
     if (success && mounted) {
       context.go('/channels/@me');
     }

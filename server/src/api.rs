@@ -1053,7 +1053,19 @@ async fn list_channels(
     State(state): State<AppState>,
     Path(server_id): Path<Uuid>,
 ) -> AppResult<Json<Vec<Channel>>> {
-    let channels = db::channels::list_for_server(&state.db, server_id).await?;
+    let mut channels = db::channels::list_for_server(&state.db, server_id).await?;
+    
+    // Embed active voice participants into voice channels
+    for channel in channels.iter_mut() {
+        if channel.channel_type == ChannelType::Voice {
+            if let Some(participants) = state.voice_states.get(&channel.id) {
+                channel.voice_participants = Some(participants.value().clone());
+            } else {
+                channel.voice_participants = Some(Vec::new());
+            }
+        }
+    }
+    
     Ok(Json(channels))
 }
 
@@ -1388,8 +1400,11 @@ async fn voice_join(
     State(state): State<AppState>,
     auth: AuthUser,
     Path(channel_id): Path<Uuid>,
+    body: Option<Json<VoiceStateBody>>,
 ) -> AppResult<Json<Vec<VoiceParticipant>>> {
     let user_id = auth.user_id;
+    let initial_muted = body.as_ref().and_then(|b| b.muted).unwrap_or(false);
+    let initial_deafened = body.as_ref().and_then(|b| b.deafened).unwrap_or(false);
 
     // Remove user from any other voice channel first (one channel at a time)
     let mut old_channels = Vec::new();
@@ -1424,8 +1439,8 @@ async fn voice_join(
     let participant = VoiceParticipant {
         user_id,
         channel_id,
-        muted: false,
-        deafened: false,
+        muted: initial_muted,
+        deafened: initial_deafened,
         user: user_public.clone(),
     };
 
@@ -1446,8 +1461,8 @@ async fn voice_join(
         channel_id,
         user_id,
         joined: true,
-        muted: false,
-        deafened: false,
+        muted: initial_muted,
+        deafened: initial_deafened,
         user: user_public,
     };
     state.broadcast_to_channel(&channel_id, &event);

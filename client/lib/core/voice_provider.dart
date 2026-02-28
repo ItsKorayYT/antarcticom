@@ -48,6 +48,9 @@ class VoiceState {
   /// Channel ID the current user is connected to (null = not in voice).
   final String? currentChannelId;
 
+  /// Whether the WebRTC connection is currently being established.
+  final bool isConnecting;
+
   /// Current user's mute state.
   final bool muted;
 
@@ -59,6 +62,7 @@ class VoiceState {
 
   const VoiceState({
     this.currentChannelId,
+    this.isConnecting = false,
     this.muted = false,
     this.deafened = false,
     this.participants = const {},
@@ -67,6 +71,7 @@ class VoiceState {
   VoiceState copyWith({
     String? currentChannelId,
     bool clearChannel = false,
+    bool? isConnecting,
     bool? muted,
     bool? deafened,
     Map<String, List<VoiceParticipant>>? participants,
@@ -74,6 +79,7 @@ class VoiceState {
     return VoiceState(
       currentChannelId:
           clearChannel ? null : (currentChannelId ?? this.currentChannelId),
+      isConnecting: isConnecting ?? this.isConnecting,
       muted: muted ?? this.muted,
       deafened: deafened ?? this.deafened,
       participants: participants ?? this.participants,
@@ -94,15 +100,6 @@ const Map<String, dynamic> _rtcConfig = {
   ],
 };
 
-const Map<String, dynamic> _mediaConstraints = {
-  'audio': {
-    'echoCancellation': true,
-    'noiseSuppression': true,
-    'autoGainControl': true,
-  },
-  'video': false,
-};
-
 // ─── Notifier ───────────────────────────────────────────────────────────
 
 class VoiceNotifier extends StateNotifier<VoiceState> {
@@ -110,7 +107,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   final SocketService _primarySocket;
   final ConnectionManager _connMgr;
   final String? _currentUserId;
-  final AppSettings _settings;
+  final Ref _ref;
   final List<StreamSubscription> _subs = [];
 
   /// Local audio stream from the microphone.
@@ -134,7 +131,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   static const String serverId = '00000000-0000-0000-0000-000000000000';
 
   VoiceNotifier(this._api, this._primarySocket, this._connMgr,
-      this._currentUserId, this._settings)
+      this._currentUserId, this._ref)
       : super(const VoiceState()) {
     // Listen to the primary (auth hub / standalone) socket
     _subs.add(_primarySocket.events.listen(_handleEvent));
@@ -303,6 +300,12 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
     pc.onIceConnectionState = (RTCIceConnectionState iceState) {
       debugPrint('ICE state with SFU: $iceState');
+      if (iceState == RTCIceConnectionState.RTCIceConnectionStateConnected) {
+        state = state.copyWith(isConnecting: false);
+      } else if (iceState ==
+          RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
+        state = state.copyWith(isConnecting: true);
+      }
     };
 
     return pc;
@@ -421,24 +424,48 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
   }
 
-  Future<void> _startLocalAudio() async {
-    try {
-      final constraints = Map<String, dynamic>.from(_mediaConstraints);
-      if (_settings.selectedInputDeviceId != null) {
-        final audioConstraints = constraints['audio'];
-        if (audioConstraints is Map) {
-          constraints['audio'] = {
-            ...audioConstraints,
-            'deviceId': {'exact': _settings.selectedInputDeviceId},
-          };
-        } else {
-          constraints['audio'] = {
-            'deviceId': {'exact': _settings.selectedInputDeviceId},
-          };
+  /// Sync initial participants for a channel (called when fetching server channels)
+  void syncInitialParticipants(
+      String channelId, List<VoiceParticipant> initialParticipants) {
+    final newParticipants =
+        Map<String, List<VoiceParticipant>>.from(state.participants);
+
+    // Merge logic: only add if we don't already have a more recent state for this user
+    // Actually, since this is initial sync, we can just replace what's there
+    // UNLESS we are actively in this channel, in which case we might have more up to date WebSocket state.
+    if (state.currentChannelId == channelId &&
+        newParticipants[channelId] != null) {
+      final mergedList =
+          List<VoiceParticipant>.from(newParticipants[channelId]!);
+      for (final p in initialParticipants) {
+        if (!mergedList.any((existing) => existing.userId == p.userId)) {
+          mergedList.add(p);
         }
       }
+      newParticipants[channelId] = mergedList;
+    } else {
+      newParticipants[channelId] = initialParticipants;
+    }
 
-      _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    state = state.copyWith(participants: newParticipants);
+  }
+
+  Future<void> _startLocalAudio() async {
+    final settings = _ref.read(settingsProvider);
+    final mediaConstraints = {
+      'audio': {
+        'echoCancellation': settings.enableEchoCancellation,
+        'noiseSuppression': settings.enableNoiseSuppression,
+        'autoGainControl': true,
+        if (settings.selectedInputDeviceId != null)
+          'deviceId': {'exact': settings.selectedInputDeviceId},
+      },
+      'video': false,
+    };
+
+    try {
+      _localStream =
+          await navigator.mediaDevices.getUserMedia(mediaConstraints);
       debugPrint('Local audio stream started: ${_localStream!.id}');
     } catch (e) {
       debugPrint('Failed to get microphone: $e');
@@ -550,6 +577,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
 
     _renegotiating = true;
+    state = state.copyWith(isConnecting: true);
 
     debugPrint('Renegotiating with SFU for channel $channelId');
     try {
@@ -606,19 +634,35 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     try {
       await _startLocalAudio();
 
-      final data = await _api.joinVoiceChannel(channelId);
+      final currentMuted = state.muted;
+      final currentDeafened = state.deafened;
+      final data = await _api.joinVoiceChannel(
+        channelId,
+        muted: currentMuted,
+        deafened: currentDeafened,
+      );
       final participants = data
           .map((e) => VoiceParticipant.fromJson(e as Map<String, dynamic>))
           .toList();
 
       final newParticipants =
           Map<String, List<VoiceParticipant>>.from(state.participants);
-      newParticipants[channelId] = participants;
+
+      // Merge API participants with existing ones from WebSocket updates
+      // that might have arrived while the API request was pending.
+      final mergedList =
+          List<VoiceParticipant>.from(newParticipants[channelId] ?? []);
+      for (final p in participants) {
+        mergedList.removeWhere((existing) => existing.userId == p.userId);
+        mergedList.add(p);
+      }
+      newParticipants[channelId] = mergedList;
 
       state = state.copyWith(
         currentChannelId: channelId,
-        muted: false,
-        deafened: false,
+        isConnecting: true,
+        muted: currentMuted,
+        deafened: currentDeafened,
         participants: newParticipants,
       );
 
@@ -644,6 +688,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
     state = state.copyWith(
       clearChannel: true,
+      isConnecting: false,
       muted: false,
       deafened: false,
     );
@@ -699,6 +744,5 @@ final voiceProvider = StateNotifierProvider<VoiceNotifier, VoiceState>((ref) {
   final socket = ref.watch(socketServiceProvider);
   final connMgr = ref.read(connectionManagerProvider);
   final userId = ref.watch(authProvider).user?.id;
-  final settings = ref.watch(settingsProvider);
-  return VoiceNotifier(api, socket, connMgr, userId, settings);
+  return VoiceNotifier(api, socket, connMgr, userId, ref);
 });

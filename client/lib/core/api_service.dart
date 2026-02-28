@@ -260,8 +260,15 @@ class ApiService {
   // ─── Voice ──────────────────────────────────────────────────────────
 
   /// Join a voice channel. Returns the current participant list.
-  Future<List<dynamic>> joinVoiceChannel(String channelId) async {
-    final response = await _dio.post('/api/voice/$channelId/join');
+  Future<List<dynamic>> joinVoiceChannel(String channelId,
+      {bool? muted, bool? deafened}) async {
+    final response = await _dio.post(
+      '/api/voice/$channelId/join',
+      data: {
+        if (muted != null) 'muted': muted,
+        if (deafened != null) 'deafened': deafened,
+      },
+    );
     return response.data as List<dynamic>;
   }
 

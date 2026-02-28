@@ -1,92 +1,144 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Antarcticom Design System — Dark-first, premium, futuristic.
-class AntarcticomTheme {
-  AntarcticomTheme._();
+import 'settings_provider.dart';
 
-  // ─── Color Palette ──────────────────────────────────────────────────────
+enum AppUiTheme { defaultDark, liquidGlass }
 
-  /// Background colors (layered depth)
-  static const Color bgDeepest = Color(0xFF0A0A0F); // Deepest background
-  static const Color bgPrimary = Color(0xFF0F1117); // Main background
-  static const Color bgSecondary = Color(0xFF151822); // Sidebar / panels
-  static const Color bgTertiary =
-      Color(0xFF1B1F2E); // Cards / elevated surfaces
-  static const Color bgHover = Color(0xFF222738); // Hover state
+class AppThemeData {
+  final Color bgDeepest;
+  final Color bgPrimary;
+  final Color bgSecondary;
+  final Color bgTertiary;
+  final Color bgHover;
 
-  /// Accent colors
-  static const Color accentPrimary = Color(0xFF6C5CE7); // Primary violet
-  static const Color accentSecondary = Color(0xFF00D2FF); // Cyan highlight
-  static const Color accentGradientStart = Color(0xFF6C5CE7);
-  static const Color accentGradientEnd = Color(0xFF00D2FF);
+  final Color accentPrimary;
+  final Color accentSecondary;
+  final Color accentGradientStart;
+  final Color accentGradientEnd;
 
-  /// Status colors
-  static const Color online = Color(0xFF00E676);
-  static const Color idle = Color(0xFFFFAB00);
-  static const Color dnd = Color(0xFFFF1744);
-  static const Color offline = Color(0xFF546E7A);
+  final Color online;
+  final Color idle;
+  final Color dnd;
+  final Color offline;
 
-  /// Text colors
-  static const Color textPrimary = Color(0xFFEEEFF2);
-  static const Color textSecondary = Color(0xFF8B8FA3);
-  static const Color textMuted = Color(0xFF5A5E73);
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textMuted;
 
-  /// Voice indicator colors
-  static const Color voiceSpeaking = Color(0xFF00E676);
-  static const Color voiceRing = Color(0xFF6C5CE7);
+  final Color voiceSpeaking;
+  final Color voiceRing;
 
-  /// Danger / destructive
-  static const Color danger = Color(0xFFFF1744);
+  final Color danger;
+  final Color dividerColor;
 
-  // ─── Gradients ──────────────────────────────────────────────────────────
+  final LinearGradient accentGradient;
+  final LinearGradient subtleGradient;
 
-  static const LinearGradient accentGradient = LinearGradient(
-    colors: [accentGradientStart, accentGradientEnd],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
+  final ThemeData materialTheme;
 
-  static const LinearGradient subtleGradient = LinearGradient(
-    colors: [Color(0xFF1B1F2E), Color(0xFF151822)],
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-  );
+  const AppThemeData({
+    required this.bgDeepest,
+    required this.bgPrimary,
+    required this.bgSecondary,
+    required this.bgTertiary,
+    required this.bgHover,
+    required this.accentPrimary,
+    required this.accentSecondary,
+    required this.accentGradientStart,
+    required this.accentGradientEnd,
+    required this.online,
+    required this.idle,
+    required this.dnd,
+    required this.offline,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textMuted,
+    required this.voiceSpeaking,
+    required this.voiceRing,
+    required this.danger,
+    required this.dividerColor,
+    required this.accentGradient,
+    required this.subtleGradient,
+    required this.materialTheme,
+  });
 
-  // ─── Border Radius ─────────────────────────────────────────────────────
+  static AppThemeData get defaultTheme {
+    return _buildTheme(
+      bgDeepest: const Color(0xFF0A0A0F),
+      bgPrimary: const Color(0xFF0F1117),
+      bgSecondary: const Color(0xFF151822),
+      bgTertiary: const Color(0xFF1B1F2E),
+      bgHover: const Color(0xFF222738),
+      dividerColor: const Color(0xFF1E2235),
+    );
+  }
 
-  static const double radiusSm = 6.0;
-  static const double radiusMd = 10.0;
-  static const double radiusLg = 16.0;
-  static const double radiusXl = 24.0;
-  static const double radiusFull = 999.0;
+  static AppThemeData get glassTheme {
+    return _buildTheme(
+      bgDeepest: const Color(0x660A0A0F),
+      bgPrimary: const Color(0x770F1117),
+      bgSecondary: const Color(0x44151822),
+      bgTertiary: const Color(0x551B1F2E),
+      bgHover: const Color(0x66222738),
+      dividerColor: const Color(0x33FFFFFF),
+    );
+  }
 
-  // ─── Spacing ────────────────────────────────────────────────────────────
+  static AppThemeData _buildTheme({
+    required Color bgDeepest,
+    required Color bgPrimary,
+    required Color bgSecondary,
+    required Color bgTertiary,
+    required Color bgHover,
+    required Color dividerColor,
+  }) {
+    const accentPrimary = Color(0xFF6C5CE7);
+    const accentSecondary = Color(0xFF00D2FF);
+    const textPrimary = Color(0xFFEEEFF2);
+    const textSecondary = Color(0xFF8B8FA3);
+    const textMuted = Color(0xFF5A5E73);
+    const danger = Color(0xFFFF1744);
 
-  static const double spacingXs = 4.0;
-  static const double spacingSm = 8.0;
-  static const double spacingMd = 16.0;
-  static const double spacingLg = 24.0;
-  static const double spacingXl = 32.0;
-
-  // ─── Animations ─────────────────────────────────────────────────────────
-
-  static const Duration animFast = Duration(milliseconds: 120);
-  static const Duration animNormal = Duration(milliseconds: 200);
-  static const Duration animSlow = Duration(milliseconds: 350);
-  static const Curve animCurve = Curves.easeOutCubic;
-
-  // ─── ThemeData ──────────────────────────────────────────────────────────
-
-  static ThemeData get dark => ThemeData(
+    return AppThemeData(
+      bgDeepest: bgDeepest,
+      bgPrimary: bgPrimary,
+      bgSecondary: bgSecondary,
+      bgTertiary: bgTertiary,
+      bgHover: bgHover,
+      accentPrimary: accentPrimary,
+      accentSecondary: accentSecondary,
+      accentGradientStart: accentPrimary,
+      accentGradientEnd: accentSecondary,
+      online: const Color(0xFF00E676),
+      idle: const Color(0xFFFFAB00),
+      dnd: danger,
+      offline: const Color(0xFF546E7A),
+      textPrimary: textPrimary,
+      textSecondary: textSecondary,
+      textMuted: textMuted,
+      voiceSpeaking: const Color(0xFF00E676),
+      voiceRing: accentPrimary,
+      danger: danger,
+      dividerColor: dividerColor,
+      accentGradient: const LinearGradient(
+        colors: [accentPrimary, accentSecondary],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      subtleGradient: LinearGradient(
+        colors: [bgTertiary, bgSecondary],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ),
+      materialTheme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
         scaffoldBackgroundColor: bgPrimary,
         canvasColor: bgSecondary,
         cardColor: bgTertiary,
-
-        // Color scheme
-        colorScheme: const ColorScheme.dark(
+        colorScheme: ColorScheme.dark(
           primary: accentPrimary,
           secondary: accentSecondary,
           surface: bgSecondary,
@@ -96,11 +148,8 @@ class AntarcticomTheme {
           onSurface: textPrimary,
           onError: textPrimary,
         ),
-
-        // Typography
         textTheme: GoogleFonts.interTextTheme(
           TextTheme(
-            // Headlines
             headlineLarge: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w700,
@@ -125,8 +174,6 @@ class AntarcticomTheme {
               fontWeight: FontWeight.w600,
               color: textPrimary,
             ),
-
-            // Body
             bodyLarge: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w400,
@@ -151,8 +198,6 @@ class AntarcticomTheme {
               fontWeight: FontWeight.w400,
               color: textMuted,
             ),
-
-            // Labels (buttons, chips)
             labelLarge: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -173,42 +218,38 @@ class AntarcticomTheme {
             ),
           ),
         ),
-
-        // Input decoration
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: bgDeepest,
           hintStyle: const TextStyle(color: textMuted),
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: spacingMd,
+            horizontal: AntarcticomTheme.spacingMd,
             vertical: 14,
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
+            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
             borderSide: BorderSide.none,
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
+            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
             borderSide: BorderSide.none,
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
+            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
             borderSide: const BorderSide(color: accentPrimary, width: 1.5),
           ),
         ),
-
-        // Elevated button
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             backgroundColor: accentPrimary,
             foregroundColor: textPrimary,
             elevation: 0,
             padding: const EdgeInsets.symmetric(
-              horizontal: spacingLg,
+              horizontal: AntarcticomTheme.spacingLg,
               vertical: 14,
             ),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(radiusMd),
+              borderRadius: BorderRadius.circular(AntarcticomTheme.radiusMd),
             ),
             textStyle: const TextStyle(
               fontSize: 14,
@@ -216,43 +257,66 @@ class AntarcticomTheme {
             ),
           ),
         ),
-
-        // Icon theme
         iconTheme: const IconThemeData(
           color: textSecondary,
           size: 20,
         ),
-
-        // Scrollbar
         scrollbarTheme: ScrollbarThemeData(
           thumbColor: WidgetStateProperty.all(textMuted.withValues(alpha: 0.3)),
-          radius: const Radius.circular(radiusFull),
+          radius: const Radius.circular(AntarcticomTheme.radiusFull),
           thickness: WidgetStateProperty.all(4),
         ),
-
-        // Tooltip
         tooltipTheme: TooltipThemeData(
           decoration: BoxDecoration(
             color: bgTertiary,
-            borderRadius: BorderRadius.circular(radiusSm),
+            borderRadius: BorderRadius.circular(AntarcticomTheme.radiusSm),
           ),
           textStyle: const TextStyle(
             color: textPrimary,
             fontSize: 12,
           ),
         ),
-
-        // Divider
-        dividerTheme: const DividerThemeData(
-          color: Color(0xFF1E2235),
+        dividerTheme: DividerThemeData(
+          color: dividerColor,
           thickness: 1,
           space: 0,
         ),
-      );
+      ),
+    );
+  }
 }
 
-/// Voice speaking indicator gradient animation mixin.
-/// Apply this to widgets that show voice activity.
+final themeProvider = Provider<AppThemeData>((ref) {
+  final uiTheme = ref.watch(settingsProvider.select((s) => s.uiTheme));
+  return uiTheme == AppUiTheme.liquidGlass
+      ? AppThemeData.glassTheme
+      : AppThemeData.defaultTheme;
+});
+
+class AntarcticomTheme {
+  AntarcticomTheme._();
+
+  // ─── Border Radius ─────────────────────────────────────────────────────
+  static const double radiusSm = 6.0;
+  static const double radiusMd = 10.0;
+  static const double radiusLg = 16.0;
+  static const double radiusXl = 24.0;
+  static const double radiusFull = 999.0;
+
+  // ─── Spacing ────────────────────────────────────────────────────────────
+  static const double spacingXs = 4.0;
+  static const double spacingSm = 8.0;
+  static const double spacingMd = 16.0;
+  static const double spacingLg = 24.0;
+  static const double spacingXl = 32.0;
+
+  // ─── Animations ─────────────────────────────────────────────────────────
+  static const Duration animFast = Duration(milliseconds: 120);
+  static const Duration animNormal = Duration(milliseconds: 200);
+  static const Duration animSlow = Duration(milliseconds: 350);
+  static const Curve animCurve = Curves.easeOutCubic;
+}
+
 class VoiceIndicatorColors {
   static const List<Color> speakingGradient = [
     Color(0xFF00E676),

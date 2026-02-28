@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'api_service.dart';
+import 'voice_provider.dart';
 
 // ─── Channel Model ──────────────────────────────────────────────────────
 
@@ -57,8 +58,9 @@ class ChannelsState {
 
 class ChannelsNotifier extends StateNotifier<ChannelsState> {
   final ApiService _api;
+  final Ref _ref;
 
-  ChannelsNotifier(this._api) : super(const ChannelsState());
+  ChannelsNotifier(this._api, this._ref) : super(const ChannelsState());
 
   Future<void> fetchChannels(String serverId) async {
     state = const ChannelsState(isLoading: true);
@@ -67,6 +69,20 @@ class ChannelsNotifier extends StateNotifier<ChannelsState> {
       final channels = data
           .map((e) => ChannelInfo.fromJson(e as Map<String, dynamic>))
           .toList();
+
+      // Sync the initial voice participants locally embedded in the channel payload
+      for (final e in data) {
+        final json = e as Map<String, dynamic>;
+        if (json['voice_participants'] != null) {
+          final list = (json['voice_participants'] as List)
+              .map((p) => VoiceParticipant.fromJson(p as Map<String, dynamic>))
+              .toList();
+          _ref
+              .read(voiceProvider.notifier)
+              .syncInitialParticipants(json['id'] as String, list);
+        }
+      }
+
       state = ChannelsState(channels: channels);
     } catch (e) {
       state = const ChannelsState(error: 'Failed to load channels');
@@ -93,7 +109,7 @@ class ChannelsNotifier extends StateNotifier<ChannelsState> {
 final channelsProvider =
     StateNotifierProvider<ChannelsNotifier, ChannelsState>((ref) {
   final api = ref.watch(apiServiceProvider);
-  return ChannelsNotifier(api);
+  return ChannelsNotifier(api, ref);
 });
 
 /// Currently selected channel ID.

@@ -16,15 +16,17 @@ class AppSettings {
   final double starDensity;
   final TaskbarPosition taskbarPosition;
   final AppBackgroundTheme backgroundTheme;
+  final AppUiTheme uiTheme;
 
   const AppSettings({
     this.sidebarOpacity = 0.85,
     this.backgroundOpacity = 0.5,
-    this.accentColor = AntarcticomTheme.accentPrimary,
+    this.accentColor = const Color(0xFF6C5CE7),
     this.enableStarfield = true,
     this.starDensity = 0.5,
     this.taskbarPosition = TaskbarPosition.bottom,
     this.backgroundTheme = AppBackgroundTheme.stars,
+    this.uiTheme = AppUiTheme.defaultDark,
     this.rainbowMode = false,
     this.moonX = 0.8,
     this.moonY = 0.2,
@@ -36,6 +38,8 @@ class AppSettings {
     this.shootingStarFrequency = 0.5,
     this.selectedInputDeviceId,
     this.selectedOutputDeviceId,
+    this.enableNoiseSuppression = true,
+    this.enableEchoCancellation = true,
   });
 
   final bool rainbowMode;
@@ -49,6 +53,8 @@ class AppSettings {
   final double shootingStarFrequency; // 0.0 (Rare) to 1.0 (Frequent)
   final String? selectedInputDeviceId;
   final String? selectedOutputDeviceId;
+  final bool enableNoiseSuppression;
+  final bool enableEchoCancellation;
 
   AppSettings copyWith({
     double? sidebarOpacity,
@@ -58,6 +64,7 @@ class AppSettings {
     double? starDensity,
     TaskbarPosition? taskbarPosition,
     AppBackgroundTheme? backgroundTheme,
+    AppUiTheme? uiTheme,
     bool? rainbowMode,
     double? moonX,
     double? moonY,
@@ -69,6 +76,8 @@ class AppSettings {
     double? shootingStarFrequency,
     String? selectedInputDeviceId,
     String? selectedOutputDeviceId,
+    bool? enableNoiseSuppression,
+    bool? enableEchoCancellation,
   }) {
     return AppSettings(
       sidebarOpacity: sidebarOpacity ?? this.sidebarOpacity,
@@ -78,6 +87,7 @@ class AppSettings {
       starDensity: starDensity ?? this.starDensity,
       taskbarPosition: taskbarPosition ?? this.taskbarPosition,
       backgroundTheme: backgroundTheme ?? this.backgroundTheme,
+      uiTheme: uiTheme ?? this.uiTheme,
       rainbowMode: rainbowMode ?? this.rainbowMode,
       moonX: moonX ?? this.moonX,
       moonY: moonY ?? this.moonY,
@@ -92,6 +102,10 @@ class AppSettings {
           selectedInputDeviceId ?? this.selectedInputDeviceId,
       selectedOutputDeviceId:
           selectedOutputDeviceId ?? this.selectedOutputDeviceId,
+      enableNoiseSuppression:
+          enableNoiseSuppression ?? this.enableNoiseSuppression,
+      enableEchoCancellation:
+          enableEchoCancellation ?? this.enableEchoCancellation,
     );
   }
 }
@@ -107,6 +121,7 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   static const _keyStarfield = 'enable_starfield';
   static const _keyTaskbarPos = 'taskbar_pos';
   static const _keyBgTheme = 'bg_theme';
+  static const _keyUiTheme = 'ui_theme'; // New key for UI theme
   static const _keyRainbow = 'rainbow_mode';
   static const _keyMoonX = 'moon_x';
   static const _keyMoonY = 'moon_y';
@@ -118,6 +133,12 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
   static const _keyShootingStarFreq = 'shooting_star_freq';
   static const _keyInputDeviceId = 'input_device_id';
   static const _keyOutputDeviceId = 'output_device_id';
+
+  Future<void> setUiTheme(AppUiTheme theme) async {
+    state = state.copyWith(uiTheme: theme);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_keyUiTheme, theme.index);
+  }
 
   Future<void> setMoonPosition(double x, double y) async {
     state = state.copyWith(moonX: x, moonY: y);
@@ -177,6 +198,18 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     }
   }
 
+  Future<void> toggleNoiseSuppression(bool value) async {
+    state = state.copyWith(enableNoiseSuppression: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('enable_noise_suppression', value);
+  }
+
+  Future<void> toggleEchoCancellation(bool value) async {
+    state = state.copyWith(enableEchoCancellation: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('enable_echo_cancellation', value);
+  }
+
   Future<void> _loadSettings() async {
     final prefs = await SharedPreferences.getInstance();
     final sidebarOpacity = prefs.getDouble(_keySidebarOpacity) ?? 0.85;
@@ -186,8 +219,11 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
     final taskbarIndex =
         prefs.getInt(_keyTaskbarPos) ?? TaskbarPosition.bottom.index;
-    final themeIndex =
+    final backgroundThemeIndex =
         prefs.getInt(_keyBgTheme) ?? AppBackgroundTheme.stars.index;
+    final uiThemeIndex =
+        prefs.getInt(_keyUiTheme) ?? AppUiTheme.defaultDark.index;
+
     final rainbow = prefs.getBool(_keyRainbow) ?? false;
     final mX = prefs.getDouble(_keyMoonX) ?? 0.8;
     final mY = prefs.getDouble(_keyMoonY) ?? 0.2;
@@ -199,18 +235,40 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final starFreq = prefs.getDouble(_keyShootingStarFreq) ?? 0.5;
     final inputId = prefs.getString(_keyInputDeviceId);
     final outputId = prefs.getString(_keyOutputDeviceId);
+    final noiseSuppression = prefs.getBool('enable_noise_suppression') ?? true;
+    final echoCancellation = prefs.getBool('enable_echo_cancellation') ?? true;
+
+    final TaskbarPosition loadedPosition;
+    if (taskbarIndex >= 0 && taskbarIndex < TaskbarPosition.values.length) {
+      loadedPosition = TaskbarPosition.values[taskbarIndex];
+    } else {
+      loadedPosition = TaskbarPosition.bottom;
+    }
+
+    final AppBackgroundTheme loadedBgTheme;
+    if (backgroundThemeIndex >= 0 &&
+        backgroundThemeIndex < AppBackgroundTheme.values.length) {
+      loadedBgTheme = AppBackgroundTheme.values[backgroundThemeIndex];
+    } else {
+      loadedBgTheme = AppBackgroundTheme.stars;
+    }
+
+    final AppUiTheme loadedUiTheme;
+    if (uiThemeIndex >= 0 && uiThemeIndex < AppUiTheme.values.length) {
+      loadedUiTheme = AppUiTheme.values[uiThemeIndex];
+    } else {
+      loadedUiTheme = AppUiTheme.defaultDark;
+    }
 
     state = AppSettings(
       sidebarOpacity: sidebarOpacity,
       backgroundOpacity: bgOpacity,
       enableStarfield: starfield,
-      accentColor: accentValue != null
-          ? Color(accentValue)
-          : AntarcticomTheme.accentPrimary,
-      taskbarPosition:
-          TaskbarPosition.values[taskbarIndex % TaskbarPosition.values.length],
-      backgroundTheme: AppBackgroundTheme
-          .values[themeIndex % AppBackgroundTheme.values.length],
+      accentColor:
+          accentValue != null ? Color(accentValue) : const Color(0xFF6C5CE7),
+      taskbarPosition: loadedPosition,
+      backgroundTheme: loadedBgTheme,
+      uiTheme: loadedUiTheme,
       rainbowMode: rainbow,
       moonX: mX,
       moonY: mY,
@@ -222,6 +280,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
       shootingStarFrequency: starFreq,
       selectedInputDeviceId: inputId,
       selectedOutputDeviceId: outputId,
+      enableNoiseSuppression: noiseSuppression,
+      enableEchoCancellation: echoCancellation,
     );
   }
 
@@ -257,6 +317,10 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_keyTaskbarPos, position.index);
   }
+
+  // ────────────────────────────────────────────────────────
+  // Theming & Appearance Methods
+  // ────────────────────────────────────────────────────────
 
   Future<void> setBackgroundTheme(AppBackgroundTheme theme) async {
     final isStars = theme == AppBackgroundTheme.stars;
