@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
@@ -130,7 +131,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       return true;
     } catch (e) {
-      print('LOGIN ERROR: $e');
+      debugPrint('LOGIN ERROR: $e');
       final message = _extractError(e);
       state = state.copyWith(isLoading: false, error: message);
       return false;

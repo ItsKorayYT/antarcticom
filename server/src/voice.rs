@@ -1,8 +1,7 @@
 use anyhow::Result;
-use std::collections::HashMap;
 use std::sync::Arc;
 use dashmap::DashMap;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 use uuid::Uuid;
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
@@ -12,6 +11,7 @@ use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::TrackLocalWriter;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_remote::TrackRemote;
@@ -83,6 +83,15 @@ impl SfuServer {
             })
         }).value().clone();
 
+        // Clean up stale peer connection if the user is rejoining
+        if let Some(old_user) = channel.users.get(&user_id) {
+            let old_pc = old_user.peer_connection.clone();
+            drop(old_user);
+            let _ = old_pc.close().await;
+            channel.users.remove(&user_id);
+            tracing::info!("Cleaned up stale peer connection for user {}", user_id);
+        }
+
         let user = Arc::new(SfuUser {
             user_id,
             peer_connection: pc.clone(),
@@ -125,11 +134,21 @@ impl SfuServer {
                 }
 
                 // Add this track to our "outgoing" pool for other users in the channel
+                // Use add_transceiver_from_track with sendonly to ensure a proper audio transceiver
                 for other_user_entry in channel.users.iter() {
                     let other_user = other_user_entry.value();
                     if other_user.user_id != user_id_c {
-                        if let Err(e) = other_user.peer_connection.add_track(track_local.clone()).await {
-                            tracing::error!("Error adding track to user {}: {}", other_user.user_id, e);
+                        let init = RTCRtpTransceiverInit {
+                            direction: webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly,
+                            send_encodings: vec![],
+                        };
+                        match other_user.peer_connection.add_transceiver_from_track(track_local.clone(), Some(init)).await {
+                            Ok(_) => {
+                                tracing::info!("Forwarded new track to user {}", other_user.user_id);
+                            }
+                            Err(e) => {
+                                tracing::error!("Error adding track to user {}: {}", other_user.user_id, e);
+                            }
                         }
                     }
                 }
@@ -180,7 +199,11 @@ impl SfuServer {
             }
             let other_track_lock = other_user.my_track.read().await;
             if let Some(other_track) = &*other_track_lock {
-                match pc.add_track(other_track.clone()).await {
+                let init = RTCRtpTransceiverInit {
+                    direction: webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly,
+                    send_encodings: vec![],
+                };
+                match pc.add_transceiver_from_track(other_track.clone(), Some(init)).await {
                     Ok(_) => {
                         subscribed_count += 1;
                         tracing::info!("Subscribed user {} to track from user {}", user_id, other_user.user_id);
@@ -231,7 +254,11 @@ impl SfuServer {
 
     pub async fn leave_channel(&self, channel_id: Uuid, user_id: Uuid) {
         if let Some(channel) = self.channels.get(&channel_id) {
-            channel.users.remove(&user_id);
+            // Close the peer connection before removing the user
+            if let Some((_, user)) = channel.users.remove(&user_id) {
+                let _ = user.peer_connection.close().await;
+                tracing::info!("Closed peer connection for user {} leaving channel {}", user_id, channel_id);
+            }
             if channel.users.is_empty() {
                 drop(channel);
                 self.channels.remove(&channel_id);

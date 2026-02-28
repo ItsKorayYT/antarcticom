@@ -227,12 +227,8 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       debugPrint('Remote track received from SFU: ${event.track.id}, '
           'kind: ${event.track.kind}, streams: ${event.streams.length}');
 
-      // Only process audio tracks — skip phantom video tracks
-      // that arrive when the SFU has no real audio to forward.
-      if (event.track.kind != 'audio') {
-        debugPrint('Ignoring non-audio track: ${event.track.kind}');
-        return;
-      }
+      // Accept ALL tracks from the SFU — it only forwards audio, but
+      // transceiver negotiation may label them with an unexpected kind.
 
       if (event.streams.isNotEmpty) {
         final stream = event.streams[0];
@@ -313,6 +309,12 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
             'ICE gathering timed out, sending offer with available candidates');
       },
     );
+
+    // Guard: peer connection may have been cleaned up during ICE gathering
+    if (_serverConnection == null) {
+      debugPrint('Peer connection was closed during ICE gathering, aborting');
+      return;
+    }
 
     // Use the updated local description which now includes ICE candidates
     final updatedDesc = await pc.getLocalDescription();
@@ -478,6 +480,16 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     if (state.currentChannelId == channelId) {
       await leaveChannel();
       return;
+    }
+
+    // Clean up any existing WebRTC connection before joining a new channel
+    if (state.currentChannelId != null || _serverConnection != null) {
+      if (state.currentChannelId != null) {
+        try {
+          await _api.leaveVoiceChannel(state.currentChannelId!);
+        } catch (_) {}
+      }
+      await _cleanupWebRTC();
     }
 
     try {
