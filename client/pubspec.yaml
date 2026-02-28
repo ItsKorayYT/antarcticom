@@ -1,7 +1,7 @@
 name: antarcticom
 description: "Antarcticom — Next-generation communication platform"
 publish_to: 'none'
-version: 0.1.0
+version: 0.2.0
 
 environment:
   sdk: ^3.4.0

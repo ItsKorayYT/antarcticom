@@ -2,7 +2,7 @@
 ; Build with: ISCC.exe antarcticom.iss
 
 #define MyAppName      "Antarcticom"
-#define MyAppVersion   "0.1.0"
+#define MyAppVersion   "0.2.0"
 #define MyAppPublisher "Antarcticom"
 #define MyAppURL       "https://github.com/ItsKorayYT/antarcticom"
 #define MyAppExeName   "antarcticom.exe"
@@ -29,6 +29,8 @@ SetupIconFile=..\client\windows\runner\resources\app_icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+WizardImageFile=banner.bmp
+WizardSmallImageFile=logo.bmp
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -42,6 +44,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "autostart"; Description: "Launch {#MyAppName} when Windows starts"; Flags: unchecked
 
 [Files]
 ; Main executable
@@ -63,6 +66,19 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+; Add Windows Firewall rules for WebRTC
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=in action=allow program=""{app}\{#MyAppExeName}"" enable=yes profile=any"; Flags: runhidden
+Filename: "netsh"; Parameters: "advfirewall firewall add rule name=""{#MyAppName}"" dir=out action=allow program=""{app}\{#MyAppExeName}"" enable=yes profile=any"; Flags: runhidden
 
 [Registry]
 Root: HKCU; Subkey: "Software\{#MyAppPublisher}\{#MyAppName}"; ValueType: string; ValueName: "Version"; ValueData: "{#MyAppVersion}"; Flags: uninsdeletekey
+; Auto-start
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: autostart; Flags: uninsdeletevalue
+
+[UninstallRun]
+; Remove Windows Firewall rules
+Filename: "netsh"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName}"" program=""{app}\{#MyAppExeName}"""; Flags: runhidden runascurrentuser
+
+[UninstallDelete]
+; Clean up cached Flutter shared_preferences and data on uninstall
+Type: filesandordirs; Name: "{userappdata}\com.example\antarcticom"
