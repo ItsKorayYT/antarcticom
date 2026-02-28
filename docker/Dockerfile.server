@@ -3,13 +3,19 @@ FROM rust:1-bookworm AS builder
 
 WORKDIR /build
 
-# Install native build dependencies
+# Install native build dependencies + fast linker
 RUN apt-get update && apt-get install -y \
     cmake \
     pkg-config \
     libssl-dev \
     libopus-dev \
+    clang \
+    lld \
     && rm -rf /var/lib/apt/lists/*
+
+# Use all CPU cores for compilation and LLD for faster linking
+ENV CARGO_BUILD_JOBS=0
+ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
 
 # Copy dependency manifests first for Docker layer caching
 COPY server/Cargo.toml server/Cargo.lock* ./server/
