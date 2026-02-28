@@ -204,10 +204,24 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   Future<void> _handleAnswer(dynamic payload) async {
     if (_serverConnection == null) return;
 
+    // Guard: only set remote answer when we have a pending offer
+    final signalingState = _serverConnection!.signalingState;
+    debugPrint('handleAnswer: PC signaling state = $signalingState');
+    if (signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
+      debugPrint(
+          'Ignoring answer — PC is in $signalingState, not have-local-offer');
+      return;
+    }
+
     // Server payload is just the SDP string in our current implementation
     final String sdp = payload is String ? payload : payload['sdp'];
-    await _serverConnection!
-        .setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
+    try {
+      await _serverConnection!
+          .setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
+      debugPrint('Remote description (answer) set successfully');
+    } catch (e) {
+      debugPrint('setRemoteDescription error: $e');
+    }
   }
 
   Future<void> _handleIceCandidate(dynamic payload) async {
@@ -234,6 +248,12 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       debugPrint('Remote track received from SFU: ${event.track.id}, '
           'kind: ${event.track.kind}, streams: ${event.streams.length}');
 
+      // Only process audio tracks — skip any video/unknown tracks
+      if (event.track.kind != 'audio') {
+        debugPrint('Skipping non-audio track: ${event.track.kind}');
+        return;
+      }
+
       // Enable the track for playback
       event.track.enabled = !state.deafened;
 
@@ -249,15 +269,16 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
             final renderer = RTCVideoRenderer();
             await renderer.initialize();
 
-            // Critical for Windows desktop: ensure volume is up before setting the source
-            renderer.muted = false;
+            // Set srcObject FIRST, then unmute — setting muted before
+            // srcObject throws 'Can't be muted: The MediaStream is null'
             renderer.srcObject = stream;
+            renderer.muted = false;
 
             _audioRenderers[streamId] = renderer;
             debugPrint(
                 'Audio renderer created and initialized for stream $streamId');
           } catch (e) {
-            debugPrint('Audio renderer setup warning: $e');
+            debugPrint('Audio renderer setup error: $e');
           }
         }
 
