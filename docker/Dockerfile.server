@@ -13,8 +13,7 @@ RUN apt-get update && apt-get install -y \
     lld \
     && rm -rf /var/lib/apt/lists/*
 
-# Use all CPU cores for compilation and LLD for faster linking
-ENV CARGO_BUILD_JOBS=0
+# Use LLD for faster linking (cargo already uses all CPU cores by default)
 ENV RUSTFLAGS="-C linker=clang -C link-arg=-fuse-ld=lld"
 
 # Copy dependency manifests first for Docker layer caching
