@@ -234,34 +234,37 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       debugPrint('Remote track received from SFU: ${event.track.id}, '
           'kind: ${event.track.kind}, streams: ${event.streams.length}');
 
-      // Accept ALL tracks from the SFU — it only forwards audio, but
-      // transceiver negotiation may label them with an unexpected kind.
+      // Enable the track for playback
+      event.track.enabled = !state.deafened;
 
       if (event.streams.isNotEmpty) {
         final stream = event.streams[0];
-        _remoteStreams[event.track.id!] = stream;
+        final streamId = stream.id;
 
-        // Create an audio renderer to ensure playback on desktop platforms.
-        // Without this, remote audio may not auto-play on Windows.
-        try {
-          final renderer = RTCVideoRenderer();
-          await renderer.initialize();
-          renderer.srcObject = stream;
-          _audioRenderers[event.track.id!] = renderer;
-        } catch (e) {
-          debugPrint('Audio renderer setup warning: $e');
+        // Only set up one renderer per STREAM (not per track)
+        if (!_audioRenderers.containsKey(streamId)) {
+          _remoteStreams[streamId] = stream;
+
+          try {
+            final renderer = RTCVideoRenderer();
+            await renderer.initialize();
+
+            // Critical for Windows desktop: ensure volume is up before setting the source
+            renderer.muted = false;
+            renderer.srcObject = stream;
+
+            _audioRenderers[streamId] = renderer;
+            debugPrint(
+                'Audio renderer created and initialized for stream $streamId');
+          } catch (e) {
+            debugPrint('Audio renderer setup warning: $e');
+          }
         }
 
-        debugPrint('Audio track set up for remote track ${event.track.id}, '
-            'audio tracks in stream: ${stream.getAudioTracks().length}');
-
-        // Ensure audio tracks are enabled
+        // Ensure all audio tracks in the stream are enabled
         for (final audioTrack in stream.getAudioTracks()) {
           audioTrack.enabled = !state.deafened;
         }
-      } else {
-        debugPrint(
-            'WARNING: Remote track ${event.track.id} has no associated streams');
       }
     };
 
@@ -298,7 +301,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     // with other users' audio tracks. The SFU's add_track will reuse these,
     // ensuring tracks arrive as audio kind (not video).
     final currentParticipants = state.participantsFor(channelId).length;
-    final recvSlots = max(currentParticipants + 2, 5); // Room for growth
+    final recvSlots = max(currentParticipants, 1); // One slot per other user
     for (int i = 0; i < recvSlots; i++) {
       await pc.addTransceiver(
         kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
@@ -387,8 +390,10 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     _serverConnection = null;
     _remoteStreams.clear();
 
-    // Dispose audio renderers
-    for (final renderer in _audioRenderers.values) {
+    // Dispose audio renderers — copy to list first to avoid concurrent modification
+    final renderers = _audioRenderers.values.toList();
+    _audioRenderers.clear();
+    for (final renderer in renderers) {
       try {
         renderer.srcObject = null;
         await renderer.dispose();
@@ -396,7 +401,6 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
         debugPrint('Renderer dispose warning (safe to ignore): $e');
       }
     }
-    _audioRenderers.clear();
 
     if (_localStream != null) {
       for (final track in _localStream!.getTracks()) {

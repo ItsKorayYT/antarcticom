@@ -173,13 +173,20 @@ impl SfuServer {
             })
         }));
 
-        // Step 1: Set remote description
+        // Step 1: Set remote description FIRST so the PC knows about the recvonly transceivers
         pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?).await?;
 
         // Step 2: Subscribe to existing users' tracks.
-        // The client's offer includes recvonly audio transceivers, so add_track
-        // will reuse them — ensuring tracks arrive as audio kind on the client.
+        // We iterate over the PC's transceivers to find the `recvonly` ones created by the offer,
+        // and attach the existing tracks to their senders. This guarantees they go out
+        // through the negotiated audio slots.
         let mut subscribed_count = 0u32;
+        let transceivers = pc.get_transceivers().await;
+        
+        let mut available_transceivers = transceivers.into_iter().filter(|t| {
+            t.direction() == webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Recvonly
+        });
+
         for other_user_entry in channel.users.iter() {
             let other_user = other_user_entry.value();
             if other_user.user_id == user_id {
@@ -187,14 +194,20 @@ impl SfuServer {
             }
             let other_track_lock = other_user.my_track.read().await;
             if let Some(other_track) = &*other_track_lock {
-                match pc.add_track(other_track.clone()).await {
-                    Ok(_) => {
-                        subscribed_count += 1;
-                        tracing::info!("Subscribed user {} to track from user {}", user_id, other_user.user_id);
+                if let Some(transceiver) = available_transceivers.next() {
+                    match transceiver.sender().await.replace_track(Some(other_track.clone())).await {
+                        Ok(_) => {
+                            // Also update direction to sendrecv so the answer reflects that we are sending
+                            transceiver.set_direction(webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendrecv);
+                            subscribed_count += 1;
+                            tracing::info!("Subscribed user {} to track from user {} via transceiver", user_id, other_user.user_id);
+                        }
+                        Err(e) => {
+                            tracing::error!("Error replacing track on transceiver for {}: {}", other_user.user_id, e);
+                        }
                     }
-                    Err(e) => {
-                        tracing::error!("Error subscribing to existing track from {}: {}", other_user.user_id, e);
-                    }
+                } else {
+                    tracing::warn!("No available recvonly transceiver for user {}'s track!", other_user.user_id);
                 }
             }
         }
