@@ -130,6 +130,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       return true;
     } catch (e) {
+      print('LOGIN ERROR: $e');
       final message = _extractError(e);
       state = state.copyWith(isLoading: false, error: message);
       return false;

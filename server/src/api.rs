@@ -496,8 +496,12 @@ async fn register(
         return Err(AppError::Conflict("Username already taken".to_string()));
     }
 
-    // Hash password
-    let password_hash = auth::hash_password(&req.password)?;
+    // Hash password (CPU-intensive Argon2 — run on blocking threadpool)
+    let password = req.password.clone();
+    let password_hash = tokio::task::spawn_blocking(move || auth::hash_password(&password))
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Password hashing task failed: {}", e)))?
+        ?;
 
     // Create user
     let display_name = req.display_name.unwrap_or_else(|| req.username.clone());
@@ -550,8 +554,14 @@ async fn login(
         .await?
         .ok_or(AppError::Unauthorized)?;
 
-    // Verify password
-    if !auth::verify_password(&req.password, &user.password_hash)? {
+    // Verify password (CPU-intensive Argon2 — run on blocking threadpool)
+    let password = req.password.clone();
+    let hash = user.password_hash.clone();
+    let valid = tokio::task::spawn_blocking(move || auth::verify_password(&password, &hash))
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Password verification task failed: {}", e)))?
+        ?;
+    if !valid {
         return Err(AppError::Unauthorized);
     }
 
