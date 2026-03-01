@@ -88,14 +88,25 @@ class AppThemeData {
     );
   }
 
-  static AppThemeData getGlassTheme({bool isLight = false}) {
+  static AppThemeData getGlassTheme(
+      {bool isLight = false, double opacity = 0.25}) {
     return _buildTheme(
-      bgDeepest: isLight ? const Color(0x11000000) : const Color(0x660A0A0F),
-      bgPrimary: isLight ? const Color(0x77FFFFFF) : const Color(0x770F1117),
-      bgSecondary: isLight ? const Color(0x55FFFFFF) : const Color(0x44151822),
-      bgTertiary: isLight ? const Color(0x66FFFFFF) : const Color(0x551B1F2E),
-      bgHover: isLight ? const Color(0x22000000) : const Color(0x66222738),
-      dividerColor: isLight ? const Color(0x1A000000) : const Color(0x33FFFFFF),
+      bgDeepest: isLight
+          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
+          : const Color(0xFF0A0A0F).withValues(alpha: opacity),
+      bgPrimary: isLight
+          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
+          : const Color(0xFF0F1117).withValues(alpha: opacity),
+      bgSecondary: isLight
+          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
+          : const Color(0xFF151822).withValues(alpha: opacity),
+      bgTertiary: isLight
+          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
+          : const Color(0xFF1B1F2E).withValues(alpha: opacity),
+      bgHover: isLight
+          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
+          : const Color(0xFF222738).withValues(alpha: opacity),
+      dividerColor: isLight ? const Color(0x33000000) : const Color(0x33FFFFFF),
       textPrimary: isLight ? const Color(0xFF111111) : const Color(0xFFEEEFF2),
       textSecondary:
           isLight ? const Color(0xFF444444) : const Color(0xFF8B8FA3),
@@ -319,7 +330,8 @@ final themeProvider = Provider<AppThemeData>((ref) {
   final settings = ref.watch(settingsProvider);
   if (settings.uiTheme == AppUiTheme.liquidGlass) {
     bool isLightBg = settings.backgroundTheme == AppBackgroundTheme.liquidLight;
-    return AppThemeData.getGlassTheme(isLight: isLightBg);
+    return AppThemeData.getGlassTheme(
+        isLight: isLightBg, opacity: settings.glassOpacity);
   }
   return AppThemeData.defaultTheme;
 });

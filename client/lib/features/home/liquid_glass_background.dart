@@ -81,8 +81,10 @@ class _LiquidPainter extends CustomPainter {
       Paint()..color = baseBg,
     );
 
-    // Orbit parameters
-    final t = progress * 2 * math.pi;
+    // Orbit parameters based on synced time
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final syncedProgress = (now % 25000) / 25000.0;
+    final t = syncedProgress * 2 * math.pi;
 
     void drawBlob(
       Color darkColor,

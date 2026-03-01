@@ -49,7 +49,9 @@ class _RainbowBuilderState extends State<RainbowBuilder>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        final hue = _controller.value * 360;
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final syncedValue = (now % 5000) / 5000.0;
+        final hue = syncedValue * 360;
         final color = HSVColor.fromAHSV(1.0, hue, 1.0, 1.0).toColor();
         return widget.builder(context, color);
       },

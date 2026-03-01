@@ -67,6 +67,9 @@ class _SunThemeWidgetState extends ConsumerState<SunThemeWidget>
           child: AnimatedBuilder(
             animation: _controller,
             builder: (context, child) {
+              final now = DateTime.now().millisecondsSinceEpoch;
+              final t = (now % 60000) / 30000.0; // 30s reverse loop
+              final syncedValue = t <= 1.0 ? t : 2.0 - t;
               return Container(
                 width: 120,
                 height: 120,
@@ -82,7 +85,7 @@ class _SunThemeWidgetState extends ConsumerState<SunThemeWidget>
                     BoxShadow(
                       color: const Color(0xFFFFCA28).withValues(alpha: 0.6),
                       blurRadius: 80,
-                      spreadRadius: 20 + (_controller.value * 10),
+                      spreadRadius: 20 + (syncedValue * 10),
                     ),
                     BoxShadow(
                       color: const Color(0xFFFFE082).withValues(alpha: 0.4),
@@ -100,8 +103,11 @@ class _SunThemeWidgetState extends ConsumerState<SunThemeWidget>
           child: AnimatedBuilder(
             animation: _controller,
             builder: (context, child) {
+              final now = DateTime.now().millisecondsSinceEpoch;
+              final t = (now % 60000) / 30000.0; // 30s reverse loop
+              final syncedValue = t <= 1.0 ? t : 2.0 - t;
               return CustomPaint(
-                painter: _BetterCloudPainter(offset: _controller.value),
+                painter: _BetterCloudPainter(offset: syncedValue),
               );
             },
           ),
@@ -207,8 +213,10 @@ class _BirdAnimationWidgetState extends State<_BirdAnimationWidget>
       builder: (context, child) {
         return Stack(
           children: _birds.map((bird) {
+            final now = DateTime.now().millisecondsSinceEpoch;
+            final syncedValue = (now % 20000) / 20000.0;
             // Calculate individual position
-            double t = (_controller.value * bird.speed + bird.delay) % 1.0;
+            double t = (syncedValue * bird.speed + bird.delay) % 1.0;
 
             // Linear movement right to left or left to right?
             // Let's go Left -> Right for sun theme usually.
@@ -391,8 +399,10 @@ class _SimpleTwinklingStarsState extends State<_SimpleTwinklingStars>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final syncedValue = (now % 5000) / 5000.0;
         return CustomPaint(
-          painter: _TwinklePainter(_stars, _controller.value),
+          painter: _TwinklePainter(_stars, syncedValue),
         );
       },
     );
@@ -579,8 +589,11 @@ class _FieldThemeWidgetState extends State<FieldThemeWidget>
           child: AnimatedBuilder(
             animation: _controller,
             builder: (context, child) {
+              final now = DateTime.now().millisecondsSinceEpoch;
+              final t = (now % 6000) / 3000.0; // 3s reverse loop
+              final syncedValue = t <= 1.0 ? t : 2.0 - t;
               return CustomPaint(
-                painter: _GrassPainter(sway: _controller.value),
+                painter: _GrassPainter(sway: syncedValue),
               );
             },
           ),

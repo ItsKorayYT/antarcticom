@@ -13,7 +13,6 @@ import '../../core/theme.dart';
 import '../../core/settings_provider.dart';
 import '../../core/auth_provider.dart';
 import '../../core/api_service.dart';
-import '../home/background_manager.dart';
 import '../home/rainbow_builder.dart';
 
 enum SettingsCategory {
@@ -46,26 +45,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
-          // Background
-          Positioned.fill(
-            child: BackgroundManager(
-              theme: settings.backgroundTheme,
-              opacity: 1.0,
-              customColor: settings.liquidCustomColor,
-            ),
-          ),
-
           // Outer Glass Layer
           Positioned.fill(
             child: Row(
               children: [
                 // ─── MASTER SIDEBAR ───
-                _buildSidebar(settings.sidebarOpacity, theme),
+                _buildSidebar(
+                    settings.uiTheme == AppUiTheme.liquidGlass
+                        ? settings.liquidWindowOpacity
+                        : settings.sidebarOpacity,
+                    theme),
 
                 // ─── DETAIL CONTENT ───
                 Expanded(
                   child: Container(
-                    color: Colors.black.withValues(alpha: 0.2),
+                    color: settings.uiTheme == AppUiTheme.liquidGlass
+                        ? theme.bgPrimary.withValues(
+                            alpha: theme.bgPrimary.a *
+                                settings.liquidWindowOpacity)
+                        : theme.bgPrimary,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -77,8 +75,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             children: [
                               Text(
                                 _selectedCategory.label,
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: theme.textPrimary,
                                   fontSize: 32,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: -0.5,
@@ -86,8 +84,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               ),
                               const Spacer(),
                               IconButton(
-                                icon: const Icon(Icons.close,
-                                    color: Colors.white54, size: 28),
+                                icon: Icon(Icons.close,
+                                    color: theme.textSecondary, size: 28),
                                 onPressed: () {
                                   if (context.canPop()) {
                                     context.pop();
@@ -234,20 +232,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
 // ─── SHARED UI COMPONENTS ───────────────────────────────────────────────────
 
-class _GlassCard extends StatelessWidget {
+class _GlassCard extends ConsumerWidget {
   final Widget child;
   const _GlassCard({
     required this.child,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.25),
+        color: theme.bgSecondary,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white12, width: 1),
+        border: Border.all(color: theme.dividerColor, width: 1),
         boxShadow: const [
           BoxShadow(color: Colors.black26, blurRadius: 20, spreadRadius: 0),
         ],
@@ -266,7 +265,7 @@ class _GlassCard extends StatelessWidget {
   }
 }
 
-class _SettingRow extends StatelessWidget {
+class _SettingRow extends ConsumerWidget {
   final String title;
   final String? subtitle;
   final Widget trailing;
@@ -278,7 +277,8 @@ class _SettingRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = ref.watch(themeProvider);
     Widget content = Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
@@ -291,8 +291,8 @@ class _SettingRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                      color: Colors.white,
+                  style: TextStyle(
+                      color: theme.textPrimary,
                       fontSize: 16,
                       fontWeight: FontWeight.w500),
                 ),
@@ -300,7 +300,7 @@ class _SettingRow extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitle!,
-                    style: const TextStyle(color: Colors.white54, fontSize: 13),
+                    style: TextStyle(color: theme.textSecondary, fontSize: 13),
                   ),
                 ]
               ],
@@ -396,8 +396,8 @@ class _ProfileView extends ConsumerWidget {
                   children: [
                     Text(
                       user.displayName,
-                      style: const TextStyle(
-                          color: Colors.white,
+                      style: TextStyle(
+                          color: theme.textPrimary,
                           fontSize: 28,
                           fontWeight: FontWeight.bold),
                     ),
@@ -412,8 +412,8 @@ class _ProfileView extends ConsumerWidget {
                     const SizedBox(height: 12),
                     Text(
                       'User ID: ${user.id}',
-                      style: const TextStyle(
-                          color: Colors.white54,
+                      style: TextStyle(
+                          color: theme.textSecondary,
                           fontSize: 13,
                           fontFamily: 'monospace'),
                     ),
@@ -487,9 +487,9 @@ class _AppearanceView extends ConsumerWidget {
                       fontWeight: FontWeight.w600,
                       letterSpacing: 1.1)),
               const SizedBox(height: 16),
-              const Text('Application Theme',
+              Text('Application Theme',
                   style: TextStyle(
-                      color: Colors.white,
+                      color: theme.textPrimary,
                       fontSize: 16,
                       fontWeight: FontWeight.w500)),
               const SizedBox(height: 12),
@@ -498,16 +498,16 @@ class _AppearanceView extends ConsumerWidget {
                 child: CupertinoSlidingSegmentedControl<AppUiTheme>(
                   groupValue: settings.uiTheme,
                   thumbColor: theme.accentPrimary,
-                  backgroundColor: Colors.black45,
-                  children: const {
+                  backgroundColor: theme.bgDeepest,
+                  children: {
                     AppUiTheme.defaultDark: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Text('Default Dark',
-                            style: TextStyle(color: Colors.white))),
+                            style: TextStyle(color: theme.textPrimary))),
                     AppUiTheme.liquidGlass: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 12),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Text('Liquid Glass',
-                            style: TextStyle(color: Colors.white))),
+                            style: TextStyle(color: theme.textPrimary))),
                   },
                   onValueChanged: (val) {
                     if (val != null) notifier.setUiTheme(val);
@@ -515,9 +515,9 @@ class _AppearanceView extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text('Background Environment',
+              Text('Background Environment',
                   style: TextStyle(
-                      color: Colors.white,
+                      color: theme.textPrimary,
                       fontSize: 16,
                       fontWeight: FontWeight.w500)),
               const SizedBox(height: 12),
@@ -533,20 +533,20 @@ class _AppearanceView extends ConsumerWidget {
                             ? settings.backgroundTheme
                             : AppBackgroundTheme.liquidDark,
                         thumbColor: theme.accentPrimary,
-                        backgroundColor: Colors.black45,
-                        children: const {
+                        backgroundColor: theme.bgDeepest,
+                        children: {
                           AppBackgroundTheme.liquidDark: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text('Dark Liquid',
-                                  style: TextStyle(color: Colors.white))),
+                                  style: TextStyle(color: theme.textPrimary))),
                           AppBackgroundTheme.liquidLight: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text('Light Liquid',
-                                  style: TextStyle(color: Colors.white))),
+                                  style: TextStyle(color: theme.textPrimary))),
                           AppBackgroundTheme.liquidCustom: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text('Custom Tint',
-                                  style: TextStyle(color: Colors.white))),
+                                  style: TextStyle(color: theme.textPrimary))),
                         },
                         onValueChanged: (val) {
                           if (val != null) notifier.setBackgroundTheme(val);
@@ -562,24 +562,24 @@ class _AppearanceView extends ConsumerWidget {
                             ? settings.backgroundTheme
                             : AppBackgroundTheme.stars,
                         thumbColor: theme.accentPrimary,
-                        backgroundColor: Colors.black45,
-                        children: const {
+                        backgroundColor: theme.bgDeepest,
+                        children: {
                           AppBackgroundTheme.stars: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text('Deep Space',
-                                  style: TextStyle(color: Colors.white))),
+                                  style: TextStyle(color: theme.textPrimary))),
                           AppBackgroundTheme.sun: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text('Sunset',
-                                  style: TextStyle(color: Colors.white))),
+                                  style: TextStyle(color: theme.textPrimary))),
                           AppBackgroundTheme.moon: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text('Night Moon',
-                                  style: TextStyle(color: Colors.white))),
+                                  style: TextStyle(color: theme.textPrimary))),
                           AppBackgroundTheme.field: Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text('Starfield',
-                                  style: TextStyle(color: Colors.white))),
+                                  style: TextStyle(color: theme.textPrimary))),
                         },
                         onValueChanged: (val) {
                           if (val != null) notifier.setBackgroundTheme(val);
@@ -587,7 +587,7 @@ class _AppearanceView extends ConsumerWidget {
                       ),
               ),
               const SizedBox(height: 24),
-              const Divider(color: Colors.white12),
+              Divider(color: theme.dividerColor),
               const SizedBox(height: 12),
               if (settings.uiTheme == AppUiTheme.liquidGlass &&
                   settings.backgroundTheme ==
@@ -632,48 +632,64 @@ class _AppearanceView extends ConsumerWidget {
                         onTap: () {
                           showDialog(
                               context: context,
-                              builder: (context) {
+                              builder: (ctx) {
+                                // Store the original color so we can cancel
                                 Color originalColor =
                                     settings.liquidCustomColor;
-                                Color pickerColor = originalColor;
-                                return StatefulBuilder(
-                                    builder: (context, setState) {
-                                  return AlertDialog(
-                                    backgroundColor: const Color(0xFF1E1E1E),
-                                    title: const Text('Custom Tint',
-                                        style: TextStyle(color: Colors.white)),
-                                    content: SingleChildScrollView(
-                                      child: ColorPicker(
-                                        pickerColor: pickerColor,
-                                        onColorChanged: (c) {
-                                          setState(() => pickerColor = c);
-                                          notifier.setLiquidCustomColor(
-                                              c); // Live preview
-                                        },
-                                        labelTypes: const [],
-                                        pickerAreaHeightPercent: 0.8,
+
+                                return Consumer(
+                                  builder: (context, ref, _) {
+                                    // Get current color from provider for live update
+                                    final currentSettings =
+                                        ref.watch(settingsProvider);
+                                    Color pickerColor =
+                                        currentSettings.liquidCustomColor;
+
+                                    return AlertDialog(
+                                      backgroundColor: theme.bgSecondary,
+                                      title: Text('Custom Tint',
+                                          style: TextStyle(
+                                              color: theme.textPrimary)),
+                                      content: SingleChildScrollView(
+                                        child: HueRingPicker(
+                                          pickerColor: pickerColor,
+                                          onColorChanged: (c) {
+                                            // Live preview: update provider immediately
+                                            ref
+                                                .read(settingsProvider.notifier)
+                                                .setLiquidCustomColor(c);
+                                          },
+                                          enableAlpha: false,
+                                          displayThumbColor: true,
+                                        ),
                                       ),
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                          child: const Text('Cancel',
-                                              style: TextStyle(
-                                                  color: Colors.white54)),
-                                          onPressed: () {
-                                            notifier.setLiquidCustomColor(
-                                                originalColor); // Revert
-                                            Navigator.of(context).pop();
-                                          }),
-                                      TextButton(
-                                          child: Text('Select',
-                                              style: TextStyle(
-                                                  color: theme.accentPrimary)),
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                          }),
-                                    ],
-                                  );
-                                });
+                                      actions: [
+                                        TextButton(
+                                            child: Text('Cancel',
+                                                style: TextStyle(
+                                                    color:
+                                                        theme.textSecondary)),
+                                            onPressed: () {
+                                              // Revert to original color on cancel
+                                              ref
+                                                  .read(
+                                                      settingsProvider.notifier)
+                                                  .setLiquidCustomColor(
+                                                      originalColor);
+                                              Navigator.of(context).pop();
+                                            }),
+                                        TextButton(
+                                            child: Text('Select',
+                                                style: TextStyle(
+                                                    color:
+                                                        theme.accentPrimary)),
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                            }),
+                                      ],
+                                    );
+                                  },
+                                );
                               });
                         },
                         child: Container(
@@ -733,9 +749,9 @@ class _AppearanceView extends ConsumerWidget {
                       padding: const EdgeInsets.only(top: 12.0),
                       child: Row(
                         children: [
-                          const Text('Rare',
+                          Text('Rare',
                               style: TextStyle(
-                                  color: Colors.white54, fontSize: 12)),
+                                  color: theme.textSecondary, fontSize: 12)),
                           Expanded(
                             child: Slider(
                               value: settings.shootingStarFrequency,
@@ -746,9 +762,9 @@ class _AppearanceView extends ConsumerWidget {
                                   notifier.setShootingStarFrequency(val),
                             ),
                           ),
-                          const Text('Frequent',
+                          Text('Frequent',
                               style: TextStyle(
-                                  color: Colors.white54, fontSize: 12)),
+                                  color: theme.textSecondary, fontSize: 12)),
                         ],
                       ),
                     ),
@@ -984,18 +1000,18 @@ class _AdvancedView extends ConsumerWidget {
                 ),
               ),
               const SizedBox(height: 32),
-              const Text('Translucency',
+              Text('Translucency',
                   style: TextStyle(
-                      color: Colors.white,
+                      color: theme.textPrimary,
                       fontSize: 16,
                       fontWeight: FontWeight.w500)),
               const SizedBox(height: 12),
               Row(
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 80,
                     child: Text('Sidebar',
-                        style: TextStyle(color: Colors.white54)),
+                        style: TextStyle(color: theme.textSecondary)),
                   ),
                   Expanded(
                     child: Slider(
@@ -1010,10 +1026,10 @@ class _AdvancedView extends ConsumerWidget {
               ),
               Row(
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 80,
                     child: Text('Content',
-                        style: TextStyle(color: Colors.white54)),
+                        style: TextStyle(color: theme.textSecondary)),
                   ),
                   Expanded(
                     child: Slider(
@@ -1026,6 +1042,45 @@ class _AdvancedView extends ConsumerWidget {
                   ),
                 ],
               ),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    child: Text('Glass',
+                        style: TextStyle(color: theme.textSecondary)),
+                  ),
+                  Expanded(
+                    child: Slider(
+                      value: settings.glassOpacity,
+                      min: 0.0,
+                      max: 1.0,
+                      activeColor: theme.accentPrimary,
+                      onChanged: (val) => notifier.setGlassOpacity(val),
+                    ),
+                  ),
+                ],
+              ),
+              if (settings.uiTheme == AppUiTheme.liquidGlass)
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      child: Text('Window\nOpacity',
+                          style: TextStyle(
+                              color: theme.textSecondary, fontSize: 12)),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: settings.liquidWindowOpacity,
+                        min: 0.0,
+                        max: 1.0,
+                        activeColor: theme.accentPrimary,
+                        onChanged: (val) =>
+                            notifier.setLiquidWindowOpacity(val),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),

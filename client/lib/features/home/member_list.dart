@@ -8,6 +8,7 @@ import '../../core/api_service.dart';
 import '../../core/server_provider.dart';
 import '../../core/auth_provider.dart';
 import '../../core/role_provider.dart';
+import '../../core/settings_provider.dart';
 
 class MemberList extends ConsumerWidget {
   final String serverId;
@@ -24,9 +25,15 @@ class MemberList extends ConsumerWidget {
     final membersAsync = ref.watch(serverMembersProvider(serverId));
     final theme = ref.watch(themeProvider);
 
+    final settings = ref.watch(settingsProvider);
+
     return Container(
       width: isMobile ? null : 240,
-      color: theme.bgSecondary,
+      color: settings.uiTheme == AppUiTheme.liquidGlass
+          ? theme.bgSecondary.withValues(
+              alpha: theme.bgSecondary.a * settings.liquidWindowOpacity)
+          : theme.bgSecondary
+              .withValues(alpha: theme.bgSecondary.a * settings.glassOpacity),
       child: membersAsync.when(
         data: (members) {
           // Group by status

@@ -13,12 +13,14 @@ enum AppBackgroundTheme {
   field,
   liquidDark,
   liquidLight,
-  liquidCustom
+  liquidCustom,
 }
 
 class AppSettings {
   final double sidebarOpacity;
   final double backgroundOpacity;
+  final double glassOpacity;
+  final double liquidWindowOpacity;
   final Color accentColor;
   final Color liquidCustomColor;
   final bool enableStarfield; // Kept for legacy compatibility check
@@ -30,6 +32,8 @@ class AppSettings {
   const AppSettings({
     this.sidebarOpacity = 0.85,
     this.backgroundOpacity = 0.5,
+    this.glassOpacity = 0.25,
+    this.liquidWindowOpacity = 0.15,
     this.accentColor = const Color(0xFF6C5CE7),
     this.liquidCustomColor = const Color(0xFF14B8A6), // Default Teal Tint
     this.enableStarfield = true,
@@ -69,6 +73,8 @@ class AppSettings {
   AppSettings copyWith({
     double? sidebarOpacity,
     double? backgroundOpacity,
+    double? glassOpacity,
+    double? liquidWindowOpacity,
     Color? accentColor,
     Color? liquidCustomColor,
     bool? enableStarfield,
@@ -93,6 +99,8 @@ class AppSettings {
     return AppSettings(
       sidebarOpacity: sidebarOpacity ?? this.sidebarOpacity,
       backgroundOpacity: backgroundOpacity ?? this.backgroundOpacity,
+      glassOpacity: glassOpacity ?? this.glassOpacity,
+      liquidWindowOpacity: liquidWindowOpacity ?? this.liquidWindowOpacity,
       accentColor: accentColor ?? this.accentColor,
       liquidCustomColor: liquidCustomColor ?? this.liquidCustomColor,
       enableStarfield: enableStarfield ?? this.enableStarfield,
@@ -129,6 +137,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
 
   static const _keySidebarOpacity = 'sidebar_opacity';
   static const _keyBgOpacity = 'bg_opacity';
+  static const _keyGlassOpacity = 'glass_opacity';
+  static const _keyLiquidWindowOpacity = 'liquid_window_opacity';
   static const _keyAccentColor = 'accent_color';
   static const _keyLiquidCustomColor = 'liquid_custom_color';
   static const _keyStarfield = 'enable_starfield';
@@ -244,6 +254,9 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     final prefs = await SharedPreferences.getInstance();
     final sidebarOpacity = prefs.getDouble(_keySidebarOpacity) ?? 0.85;
     final bgOpacity = prefs.getDouble(_keyBgOpacity) ?? 0.5;
+    final glassOpacity = prefs.getDouble(_keyGlassOpacity) ?? 0.25;
+    final liquidWindowOpacity =
+        prefs.getDouble(_keyLiquidWindowOpacity) ?? 0.15;
     final starfield = prefs.getBool(_keyStarfield) ?? true;
     final accentValue = prefs.getInt(_keyAccentColor);
     final liquidCustomValue = prefs.getInt(_keyLiquidCustomColor);
@@ -294,6 +307,8 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = AppSettings(
       sidebarOpacity: sidebarOpacity,
       backgroundOpacity: bgOpacity,
+      glassOpacity: glassOpacity,
+      liquidWindowOpacity: liquidWindowOpacity,
       enableStarfield: starfield,
       accentColor:
           accentValue != null ? Color(accentValue) : const Color(0xFF6C5CE7),
@@ -329,6 +344,18 @@ class SettingsNotifier extends StateNotifier<AppSettings> {
     state = state.copyWith(backgroundOpacity: value);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble(_keyBgOpacity, value);
+  }
+
+  Future<void> setLiquidWindowOpacity(double value) async {
+    state = state.copyWith(liquidWindowOpacity: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyLiquidWindowOpacity, value);
+  }
+
+  Future<void> setGlassOpacity(double value) async {
+    state = state.copyWith(glassOpacity: value);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble(_keyGlassOpacity, value);
   }
 
   Future<void> setAccentColor(Color value) async {

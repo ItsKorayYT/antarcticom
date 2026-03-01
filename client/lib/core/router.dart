@@ -9,6 +9,8 @@ import '../features/home/home_screen.dart';
 import '../features/chat/channel_screen.dart';
 import 'auth_provider.dart';
 
+import '../features/background_wrapper.dart';
+
 /// App router provider — manages all navigation with auth-based redirects.
 final routerProvider = Provider<GoRouter>((ref) {
   final auth = ref.watch(authProvider);
@@ -47,7 +49,8 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // ─── Main App Shell ─────────────────────────────────────────────
       ShellRoute(
-        builder: (context, state, child) => HomeScreen(child: child),
+        builder: (context, state, child) =>
+            BackgroundWrapper(child: HomeScreen(child: child)),
         routes: [
           GoRoute(
             path: '/channels/@me',
@@ -63,8 +66,13 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
               transitionsBuilder:
                   (context, animation, secondaryAnimation, child) {
-                return FadeTransition(opacity: animation, child: child);
+                return FadeTransition(
+                  opacity:
+                      CurveTween(curve: Curves.easeInOut).animate(animation),
+                  child: child,
+                );
               },
+              transitionDuration: const Duration(milliseconds: 250),
             ),
           ),
           GoRoute(
@@ -81,8 +89,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                 ),
                 transitionsBuilder:
                     (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
+                  return FadeTransition(
+                    opacity:
+                        CurveTween(curve: Curves.easeInOut).animate(animation),
+                    child: child,
+                  );
                 },
+                transitionDuration: const Duration(milliseconds: 250),
               );
             },
           ),
@@ -97,7 +110,17 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         name: 'settings',
-        builder: (context, state) => const SettingsScreen(),
+        pageBuilder: (context, state) => CustomTransitionPage(
+          key: state.pageKey,
+          child: const BackgroundWrapper(child: SettingsScreen()),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(
+              opacity: CurveTween(curve: Curves.easeInOut).animate(animation),
+              child: child,
+            );
+          },
+          transitionDuration: const Duration(milliseconds: 300),
+        ),
       ),
     ],
   );

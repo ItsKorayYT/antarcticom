@@ -79,8 +79,11 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
           padding: const EdgeInsets.symmetric(
               horizontal: AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color: theme.bgPrimary
-                .withValues(alpha: theme.bgPrimary.a * settings.sidebarOpacity),
+            color: settings.uiTheme == AppUiTheme.liquidGlass
+                ? theme.bgPrimary.withValues(
+                    alpha: theme.bgPrimary.a * settings.liquidWindowOpacity)
+                : theme.bgPrimary.withValues(
+                    alpha: theme.bgPrimary.a * settings.glassOpacity),
           ),
           child: Row(
             children: [
@@ -156,9 +159,13 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
                           ),
                         )
                       : Container(
-                          color: theme.bgPrimary.withValues(
-                              alpha: theme.bgPrimary.a *
-                                  settings.backgroundOpacity),
+                          color: settings.uiTheme == AppUiTheme.liquidGlass
+                              ? theme.bgPrimary.withValues(
+                                  alpha: theme.bgPrimary.a *
+                                      settings.liquidWindowOpacity)
+                              : theme.bgPrimary.withValues(
+                                  alpha: theme.bgPrimary.a *
+                                      settings.glassOpacity),
                           child: ListView.builder(
                             controller: _scrollController,
                             padding: const EdgeInsets.symmetric(
@@ -191,8 +198,11 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
         Container(
           padding: const EdgeInsets.all(AntarcticomTheme.spacingMd),
           decoration: BoxDecoration(
-            color: theme.bgPrimary
-                .withValues(alpha: theme.bgPrimary.a * settings.sidebarOpacity),
+            color: settings.uiTheme == AppUiTheme.liquidGlass
+                ? theme.bgPrimary.withValues(
+                    alpha: theme.bgPrimary.a * settings.liquidWindowOpacity)
+                : theme.bgPrimary.withValues(
+                    alpha: theme.bgPrimary.a * settings.glassOpacity),
           ),
           child: Row(
             children: [

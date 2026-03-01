@@ -10,7 +10,6 @@ import '../../core/channel_provider.dart';
 import '../../core/voice_provider.dart';
 import '../../core/settings_provider.dart';
 import '../../core/api_service.dart';
-import 'background_manager.dart';
 
 import 'rainbow_builder.dart';
 import '../../core/member_provider.dart';
@@ -127,8 +126,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Widget buildSidebar() {
       return Container(
         width: 240,
-        color: theme.bgSecondary
-            .withValues(alpha: theme.bgSecondary.a * settings.sidebarOpacity),
+        color: settings.uiTheme == AppUiTheme.liquidGlass
+            ? theme.bgSecondary.withValues(
+                alpha: theme.bgSecondary.a * settings.liquidWindowOpacity)
+            : theme.bgSecondary
+                .withValues(alpha: theme.bgSecondary.a * settings.glassOpacity),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -280,8 +282,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     Widget buildContent() {
       return Expanded(
         child: Container(
-          color: theme.bgPrimary.withValues(
-              alpha: theme.bgPrimary.a * settings.backgroundOpacity),
+          color: settings.uiTheme == AppUiTheme.liquidGlass
+              ? theme.bgPrimary.withValues(
+                  alpha: theme.bgPrimary.a * settings.liquidWindowOpacity)
+              : theme.bgPrimary
+                  .withValues(alpha: theme.bgPrimary.a * settings.glassOpacity),
           child: widget.child,
         ),
       );
@@ -359,15 +364,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           : theme.bgDeepest,
       body: Stack(
         children: [
-          // Background
-          Positioned.fill(
-            child: BackgroundManager(
-              theme: settings.backgroundTheme,
-              opacity: 1.0,
-              customColor: settings.liquidCustomColor,
-            ),
-          ),
-
           // Layout
           Positioned.fill(
             child: settings.uiTheme == AppUiTheme.liquidGlass
@@ -705,7 +701,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       padding:
           const EdgeInsets.symmetric(horizontal: AntarcticomTheme.spacingSm),
       color: theme.bgSecondary
-          .withValues(alpha: theme.bgSecondary.a * settings.sidebarOpacity),
+          .withValues(alpha: theme.bgSecondary.a * settings.glassOpacity),
       child: Row(
         children: [
           RainbowBuilder(
