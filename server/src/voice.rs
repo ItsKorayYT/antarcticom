@@ -65,8 +65,7 @@ impl SfuServer {
             ice_servers: vec![
                 RTCIceServer {
                     urls: vec![
-                        "stun:stun.l.google.com:19302".to_string(),
-                        "stun:stun1.l.google.com:19302".to_string(),
+                        "stun:stun4.l.google.com:19302".to_string(),
                     ],
                     ..Default::default()
                 },
@@ -233,12 +232,30 @@ impl SfuServer {
         &self,
         channel_id: Uuid,
         user_id: Uuid,
-        candidate_json: String,
+        candidate_json: serde_json::Value,
     ) -> Result<()> {
         if let Some(channel) = self.channels.get(&channel_id) {
             if let Some(user) = channel.users.get(&user_id) {
+                // Parse the candidate fields properly
+                let candidate_str = candidate_json.get("candidate").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+                let sdp_mid = candidate_json.get("sdpMid").and_then(|v| v.as_str()).map(String::from);
+                
+                // sdpMLineIndex can be parsed as u16 or integer
+                let sdp_mline_index = candidate_json.get("sdpMLineIndex")
+                    .and_then(|v| {
+                        if let Some(num) = v.as_u64() {
+                            Some(num as u16)
+                        } else if let Some(s) = v.as_str() {
+                            s.parse::<u16>().ok()
+                        } else {
+                            None
+                        }
+                    });
+
                 user.peer_connection.add_ice_candidate(webrtc::ice_transport::ice_candidate::RTCIceCandidateInit {
-                    candidate: candidate_json,
+                    candidate: candidate_str,
+                    sdp_mid,
+                    sdp_mline_index,
                     ..Default::default()
                 }).await?;
             }

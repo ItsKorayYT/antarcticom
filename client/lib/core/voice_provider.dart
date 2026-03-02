@@ -95,8 +95,7 @@ class VoiceState {
 
 const Map<String, dynamic> _rtcConfig = {
   'iceServers': [
-    {'urls': 'stun:stun.l.google.com:19302'},
-    {'urls': 'stun:stun1.l.google.com:19302'},
+    {'urls': 'stun:stun4.l.google.com:19302'},
   ],
 };
 
@@ -224,11 +223,15 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   Future<void> _handleIceCandidate(dynamic payload) async {
     if (_serverConnection == null) return;
 
-    final String? candidateStr =
-        payload is String ? payload : payload['candidate'];
-    if (candidateStr != null) {
+    if (payload is Map<String, dynamic>) {
+      await _serverConnection!.addCandidate(RTCIceCandidate(
+        payload['candidate'],
+        payload['sdpMid'],
+        payload['sdpMLineIndex'],
+      ));
+    } else if (payload is String) {
       await _serverConnection!
-          .addCandidate(RTCIceCandidate(candidateStr, null, null));
+          .addCandidate(RTCIceCandidate(payload, null, null));
     }
   }
 
@@ -266,10 +269,8 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
             final renderer = RTCVideoRenderer();
             await renderer.initialize();
 
-            // Set srcObject FIRST, then unmute — setting muted before
-            // srcObject throws 'Can't be muted: The MediaStream is null'
+            // Set srcObject FIRST
             renderer.srcObject = stream;
-            renderer.muted = false;
 
             _audioRenderers[streamId] = renderer;
             debugPrint(
@@ -288,12 +289,16 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
     // Handle ICE candidates — send to server
     pc.onIceCandidate = (RTCIceCandidate candidate) {
-      if (state.currentChannelId != null) {
+      if (state.currentChannelId != null && candidate.candidate != null) {
         _sendSignal(
           toUserId: serverId,
           channelId: state.currentChannelId!,
           signalType: 'ice',
-          payload: candidate.candidate!,
+          payload: {
+            'candidate': candidate.candidate,
+            'sdpMid': candidate.sdpMid,
+            'sdpMLineIndex': candidate.sdpMLineIndex,
+          },
         );
       }
     };

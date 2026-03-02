@@ -1319,10 +1319,8 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
                                         }
                                     }
                                 } else if signal_type == "ice" {
-                                    if let Some(candidate) = payload.as_str() {
-                                        if let Err(e) = state_for_recv.sfu.handle_ice_candidate(channel_id, user_id, candidate.to_string()).await {
-                                            tracing::error!("SFU error handling ICE candidate: {}", e);
-                                        }
+                                    if let Err(e) = state_for_recv.sfu.handle_ice_candidate(channel_id, user_id, payload.clone()).await {
+                                        tracing::error!("SFU error handling ICE candidate: {}", e);
                                     }
                                 }
                             } else {
