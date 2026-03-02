@@ -94,7 +94,7 @@ impl AppState {
             token_cache: Arc::new(DashMap::new()),
             hub_public_key: Arc::new(RwLock::new(None)),
             voice_states: Arc::new(DashMap::new()),
-            sfu: Arc::new(crate::voice::SfuServer::new().expect("Failed to initialize SFU")),
+            sfu: Arc::new(crate::voice::SfuServer::new(config.voice.public_ip.clone()).expect("Failed to initialize SFU")),
         }
     }
 

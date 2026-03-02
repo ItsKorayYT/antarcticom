@@ -15,16 +15,16 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile.server
-    ports:
-      - "8443:8443" # API + WebSocket
-      - "8444:8444/udp" # Voice (QUIC/UDP)
+    network_mode: host
     environment:
       - ANTARCTICOM__MODE=community
-      - ANTARCTICOM__DATABASE__URL=postgres://antarcticom:antarcticom@postgres:5432/antarcticom
-      - ANTARCTICOM__REDIS__URL=redis://redis:6379
+      - ANTARCTICOM__DATABASE__URL=postgres://antarcticom:antarcticom@127.0.0.1:5432/antarcticom
+      - ANTARCTICOM__REDIS__URL=redis://127.0.0.1:6379
       - ANTARCTICOM__IDENTITY__AUTH_HUB_URL=${AUTH_HUB_URL:-https://antarctis.xyz}
       - ANTARCTICOM__IDENTITY__FEDERATION_ENABLED=true
       - ANTARCTICOM__LOGGING__LEVEL=info
+      # Set this to your VPS's public IP for WebRTC voice to work
+      - ANTARCTICOM__VOICE__PUBLIC_IP=${PUBLIC_IP:-}
     volumes:
       - keydata:/app/data/keys # Public key cache (fetched from Auth Hub)
     depends_on:
@@ -36,6 +36,8 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: antarcticom
       POSTGRES_PASSWORD: antarcticom
@@ -51,6 +53,8 @@ services:
 
   redis:
     image: redis:7-alpine
+    ports:
+      - "6379:6379"
     volumes:
       - redisdata:/data
     healthcheck:

@@ -7,6 +7,9 @@
 #   ./deploy.sh community https://custom.com # use a custom Auth Hub
 #   ./deploy.sh standalone                   # all-in-one (private user pool)
 #   ./deploy.sh                              # auto-detect from running containers
+#
+# Environment overrides:
+#   PUBLIC_IP=1.2.3.4 ./deploy.sh community  # manually set the WebRTC public IP
 
 set -e
 
@@ -48,6 +51,24 @@ case "$MODE" in
 esac
 
 echo "deploying antarcticom ($MODE mode)..."
+
+# --- Detect public IP for WebRTC ---
+if [ -z "$PUBLIC_IP" ]; then
+    echo "detecting public IP..."
+    PUBLIC_IP=$(curl -sf --max-time 5 https://ifconfig.me 2>/dev/null \
+             || curl -sf --max-time 5 https://icanhazip.com 2>/dev/null \
+             || curl -sf --max-time 5 https://ipinfo.io/ip 2>/dev/null \
+             || echo "")
+    PUBLIC_IP=$(echo "$PUBLIC_IP" | tr -d '[:space:]')
+fi
+
+if [ -n "$PUBLIC_IP" ]; then
+    echo "using public IP for WebRTC: $PUBLIC_IP"
+    export PUBLIC_IP
+else
+    echo "warning: could not detect public IP — voice chat may not work"
+    echo "  set manually: PUBLIC_IP=1.2.3.4 ./deploy.sh $MODE"
+fi
 
 # --- Pull latest changes ---
 echo "pulling latest changes..."

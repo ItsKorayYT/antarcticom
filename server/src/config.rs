@@ -64,6 +64,10 @@ pub struct VoiceConfig {
     pub max_sessions: u32,
     pub min_bitrate: u32,
     pub max_bitrate: u32,
+    /// Public IP address for WebRTC ICE candidates (required for Docker/NAT deployments).
+    /// Set via ANTARCTICOM__VOICE__PUBLIC_IP env var.
+    #[serde(default)]
+    pub public_ip: Option<String>,
 }
 
 #[allow(dead_code)]

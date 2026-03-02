@@ -35,16 +35,29 @@ pub struct SfuServer {
 }
 
 impl SfuServer {
-    pub fn new() -> Result<Self> {
+    pub fn new(public_ip: Option<String>) -> Result<Self> {
         let mut m = MediaEngine::default();
         m.register_default_codecs()?;
 
         let mut registry = Registry::new();
         registry = register_default_interceptors(registry, &mut m)?;
 
+        let mut se = webrtc::api::setting_engine::SettingEngine::default();
+
+        // If a public IP is configured, tell the ICE agent to use it
+        // instead of the container's internal IP addresses.
+        if let Some(ref ip) = public_ip {
+            se.set_nat_1to1_ips(
+                vec![ip.clone()],
+                webrtc::ice_transport::ice_candidate_type::RTCIceCandidateType::Host,
+            );
+            tracing::info!("SFU configured with NAT 1:1 public IP: {}", ip);
+        }
+
         let api = APIBuilder::new()
             .with_media_engine(m)
             .with_interceptor_registry(registry)
+            .with_setting_engine(se)
             .build();
 
         Ok(Self {
@@ -65,7 +78,8 @@ impl SfuServer {
             ice_servers: vec![
                 RTCIceServer {
                     urls: vec![
-                        "stun:stun4.l.google.com:19302".to_string(),
+                        "stun:stun.l.google.com:19302".to_string(),
+                        "stun:stun1.l.google.com:19302".to_string(),
                     ],
                     ..Default::default()
                 },

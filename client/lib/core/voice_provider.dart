@@ -95,7 +95,8 @@ class VoiceState {
 
 const Map<String, dynamic> _rtcConfig = {
   'iceServers': [
-    {'urls': 'stun:stun4.l.google.com:19302'},
+    {'urls': 'stun:stun.l.google.com:19302'},
+    {'urls': 'stun:stun1.l.google.com:19302'},
   ],
 };
 
