@@ -79,6 +79,7 @@ const TOKEN_CACHE_TTL_SECS: u64 = 60;
 
 impl AppState {
     pub fn new(db: DbPool, redis: Option<redis::Client>, config: AppConfig) -> Self {
+        let voice_public_ip = config.voice.public_ip.clone();
         Self {
             db,
             redis,
@@ -94,7 +95,7 @@ impl AppState {
             token_cache: Arc::new(DashMap::new()),
             hub_public_key: Arc::new(RwLock::new(None)),
             voice_states: Arc::new(DashMap::new()),
-            sfu: Arc::new(crate::voice::SfuServer::new(config.voice.public_ip.clone()).expect("Failed to initialize SFU")),
+            sfu: Arc::new(crate::voice::SfuServer::new(voice_public_ip).expect("Failed to initialize SFU")),
         }
     }
 
