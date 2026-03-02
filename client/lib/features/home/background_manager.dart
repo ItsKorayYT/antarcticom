@@ -7,12 +7,14 @@ import 'liquid_glass_background.dart';
 class BackgroundManager extends StatelessWidget {
   final AppBackgroundTheme theme;
   final double opacity;
+  final double blobOpacity;
   final Color? customColor;
 
   const BackgroundManager({
     super.key,
     required this.theme,
     this.opacity = 0.5,
+    this.blobOpacity = 0.7,
     this.customColor,
   });
 
@@ -33,13 +35,11 @@ class BackgroundManager extends StatelessWidget {
         background = const FieldThemeWidget();
         break;
       case AppBackgroundTheme.liquidDark:
-        background = const LiquidGlassBackgroundWidget(isLightMode: false);
-        break;
-      case AppBackgroundTheme.liquidLight:
-        background = const LiquidGlassBackgroundWidget(isLightMode: true);
+        background = LiquidGlassBackgroundWidget(blobOpacity: blobOpacity);
         break;
       case AppBackgroundTheme.liquidCustom:
-        background = LiquidGlassBackgroundWidget(customColor: customColor);
+        background = LiquidGlassBackgroundWidget(
+            customColor: customColor, blobOpacity: blobOpacity);
         break;
     }
 

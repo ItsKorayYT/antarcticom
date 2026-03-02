@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_provider.dart';
 
@@ -310,9 +311,27 @@ class ApiService {
 
 // ─── Provider ─────────────────────────────────────────────────────────
 
+/// Holds the auth hub URL. Change this to point login/register at a custom server.
+final authServerUrlProvider =
+    StateProvider<String>((ref) => kDefaultAuthHubUrl);
+
+/// Load the saved auth server URL from SharedPreferences (call once at startup).
+Future<String> loadAuthServerUrl() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getString('auth_server_url') ?? kDefaultAuthHubUrl;
+}
+
+/// Save the auth server URL to SharedPreferences.
+Future<void> saveAuthServerUrl(String url) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('auth_server_url', url);
+}
+
 /// The primary (auth hub) API service provider.
 final Provider<ApiService> apiServiceProvider = Provider<ApiService>((ref) {
+  final url = ref.watch(authServerUrlProvider);
   return ApiService(
+    baseUrl: url,
     onUnauthorized: () {
       // Defer the logout to avoid state modification during build phase
       Future.microtask(() {

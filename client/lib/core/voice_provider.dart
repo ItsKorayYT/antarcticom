@@ -417,9 +417,17 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
     if (_localStream != null) {
       for (final track in _localStream!.getTracks()) {
-        await track.stop();
+        try {
+          await track.stop();
+        } catch (e) {
+          debugPrint('Track stop warning (safe to ignore): $e');
+        }
       }
-      await _localStream!.dispose();
+      try {
+        await _localStream!.dispose();
+      } catch (e) {
+        debugPrint('Stream dispose warning (safe to ignore): $e');
+      }
       _localStream = null;
     }
   }

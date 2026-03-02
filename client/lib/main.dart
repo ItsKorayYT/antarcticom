@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme.dart';
 import 'core/router.dart';
 import 'core/settings_provider.dart';
+import 'core/api_service.dart';
 
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
@@ -23,7 +24,15 @@ void main() async {
     await Window.initialize();
   }
 
-  runApp(const ProviderScope(child: AntarcticomApp()));
+  // Load saved auth server URL before creating providers
+  final savedAuthUrl = await loadAuthServerUrl();
+
+  runApp(ProviderScope(
+    overrides: [
+      authServerUrlProvider.overrideWith((ref) => savedAuthUrl),
+    ],
+    child: const AntarcticomApp(),
+  ));
 }
 
 class AntarcticomApp extends ConsumerStatefulWidget {

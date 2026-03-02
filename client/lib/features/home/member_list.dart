@@ -30,10 +30,10 @@ class MemberList extends ConsumerWidget {
     return Container(
       width: isMobile ? null : 240,
       color: settings.uiTheme == AppUiTheme.liquidGlass
-          ? theme.bgSecondary.withValues(
-              alpha: theme.bgSecondary.a * settings.liquidWindowOpacity)
-          : theme.bgSecondary
-              .withValues(alpha: theme.bgSecondary.a * settings.glassOpacity),
+          ? theme.bgPrimary.withValues(
+              alpha: theme.bgPrimary.a * settings.liquidWindowOpacity)
+          : theme.bgPrimary
+              .withValues(alpha: theme.bgPrimary.a * settings.glassOpacity),
       child: membersAsync.when(
         data: (members) {
           // Group by status

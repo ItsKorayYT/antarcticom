@@ -527,7 +527,6 @@ class _AppearanceView extends ConsumerWidget {
                     ? CupertinoSlidingSegmentedControl<AppBackgroundTheme>(
                         groupValue: {
                           AppBackgroundTheme.liquidDark,
-                          AppBackgroundTheme.liquidLight,
                           AppBackgroundTheme.liquidCustom,
                         }.contains(settings.backgroundTheme)
                             ? settings.backgroundTheme
@@ -538,10 +537,6 @@ class _AppearanceView extends ConsumerWidget {
                           AppBackgroundTheme.liquidDark: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               child: Text('Dark Liquid',
-                                  style: TextStyle(color: theme.textPrimary))),
-                          AppBackgroundTheme.liquidLight: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              child: Text('Light Liquid',
                                   style: TextStyle(color: theme.textPrimary))),
                           AppBackgroundTheme.liquidCustom: Padding(
                               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -885,6 +880,113 @@ class _AppearanceView extends ConsumerWidget {
             ],
           ),
         ),
+        _GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Translucency',
+                  style: TextStyle(
+                      color: theme.accentPrimary,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.1)),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    child: Text('Sidebar',
+                        style: TextStyle(color: theme.textSecondary)),
+                  ),
+                  Expanded(
+                    child: Slider(
+                      value: settings.sidebarOpacity,
+                      min: 0.0,
+                      max: 1.0,
+                      activeColor: theme.accentPrimary,
+                      onChanged: (val) => notifier.setSidebarOpacity(val),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    child: Text('Content',
+                        style: TextStyle(color: theme.textSecondary)),
+                  ),
+                  Expanded(
+                    child: Slider(
+                      value: settings.backgroundOpacity,
+                      min: 0.0,
+                      max: 1.0,
+                      activeColor: theme.accentPrimary,
+                      onChanged: (val) => notifier.setBackgroundOpacity(val),
+                    ),
+                  ),
+                ],
+              ),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 80,
+                    child: Text('Glass',
+                        style: TextStyle(color: theme.textSecondary)),
+                  ),
+                  Expanded(
+                    child: Slider(
+                      value: settings.glassOpacity,
+                      min: 0.0,
+                      max: 1.0,
+                      activeColor: theme.accentPrimary,
+                      onChanged: (val) => notifier.setGlassOpacity(val),
+                    ),
+                  ),
+                ],
+              ),
+              if (settings.uiTheme == AppUiTheme.liquidGlass)
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      child: Text('Window\nOpacity',
+                          style: TextStyle(
+                              color: theme.textSecondary, fontSize: 12)),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: settings.liquidWindowOpacity,
+                        min: 0.0,
+                        max: 1.0,
+                        activeColor: theme.accentPrimary,
+                        onChanged: (val) =>
+                            notifier.setLiquidWindowOpacity(val),
+                      ),
+                    ),
+                  ],
+                ),
+              if (settings.uiTheme == AppUiTheme.liquidGlass)
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      child: Text('Blobs',
+                          style: TextStyle(color: theme.textSecondary)),
+                    ),
+                    Expanded(
+                      child: Slider(
+                        value: settings.blobOpacity,
+                        min: 0.0,
+                        max: 1.0,
+                        activeColor: theme.accentPrimary,
+                        onChanged: (val) => notifier.setBlobOpacity(val),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -999,88 +1101,6 @@ class _AdvancedView extends ConsumerWidget {
                   },
                 ),
               ),
-              const SizedBox(height: 32),
-              Text('Translucency',
-                  style: TextStyle(
-                      color: theme.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 80,
-                    child: Text('Sidebar',
-                        style: TextStyle(color: theme.textSecondary)),
-                  ),
-                  Expanded(
-                    child: Slider(
-                      value: settings.sidebarOpacity,
-                      min: 0.0,
-                      max: 1.0,
-                      activeColor: theme.accentPrimary,
-                      onChanged: (val) => notifier.setSidebarOpacity(val),
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 80,
-                    child: Text('Content',
-                        style: TextStyle(color: theme.textSecondary)),
-                  ),
-                  Expanded(
-                    child: Slider(
-                      value: settings.backgroundOpacity,
-                      min: 0.0,
-                      max: 1.0,
-                      activeColor: theme.accentPrimary,
-                      onChanged: (val) => notifier.setBackgroundOpacity(val),
-                    ),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  SizedBox(
-                    width: 80,
-                    child: Text('Glass',
-                        style: TextStyle(color: theme.textSecondary)),
-                  ),
-                  Expanded(
-                    child: Slider(
-                      value: settings.glassOpacity,
-                      min: 0.0,
-                      max: 1.0,
-                      activeColor: theme.accentPrimary,
-                      onChanged: (val) => notifier.setGlassOpacity(val),
-                    ),
-                  ),
-                ],
-              ),
-              if (settings.uiTheme == AppUiTheme.liquidGlass)
-                Row(
-                  children: [
-                    SizedBox(
-                      width: 80,
-                      child: Text('Window\nOpacity',
-                          style: TextStyle(
-                              color: theme.textSecondary, fontSize: 12)),
-                    ),
-                    Expanded(
-                      child: Slider(
-                        value: settings.liquidWindowOpacity,
-                        min: 0.0,
-                        max: 1.0,
-                        activeColor: theme.accentPrimary,
-                        onChanged: (val) =>
-                            notifier.setLiquidWindowOpacity(val),
-                      ),
-                    ),
-                  ],
-                ),
             ],
           ),
         ),

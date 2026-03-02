@@ -54,6 +54,19 @@ dev_dependencies:
   freezed: ^2.5.0
   json_serializable: ^6.7.0
   riverpod_generator: ^2.4.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  image_path: "assets/icon.png"
+  web:
+    generate: true
+    image_path: "assets/icon.png"
+    background_color: "#0A0A0F"
+    theme_color: "#0A0A0F"
+  windows:
+    generate: true
+    image_path: "assets/icon.png"
+    icon_size: 256
 
 flutter:
   uses-material-design: true

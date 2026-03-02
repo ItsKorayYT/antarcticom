@@ -39,12 +39,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/login',
         name: 'login',
-        builder: (context, state) => const LoginScreen(),
+        builder: (context, state) =>
+            const BackgroundWrapper(child: LoginScreen()),
       ),
       GoRoute(
         path: '/register',
         name: 'register',
-        builder: (context, state) => const RegisterScreen(),
+        builder: (context, state) =>
+            const BackgroundWrapper(child: RegisterScreen()),
       ),
 
       // ─── Main App Shell ─────────────────────────────────────────────

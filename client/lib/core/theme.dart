@@ -88,29 +88,17 @@ class AppThemeData {
     );
   }
 
-  static AppThemeData getGlassTheme(
-      {bool isLight = false, double opacity = 0.25}) {
+  static AppThemeData getGlassTheme({double opacity = 0.25}) {
     return _buildTheme(
-      bgDeepest: isLight
-          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
-          : const Color(0xFF0A0A0F).withValues(alpha: opacity),
-      bgPrimary: isLight
-          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
-          : const Color(0xFF0F1117).withValues(alpha: opacity),
-      bgSecondary: isLight
-          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
-          : const Color(0xFF151822).withValues(alpha: opacity),
-      bgTertiary: isLight
-          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
-          : const Color(0xFF1B1F2E).withValues(alpha: opacity),
-      bgHover: isLight
-          ? const Color(0xFFFFFFFF).withValues(alpha: opacity)
-          : const Color(0xFF222738).withValues(alpha: opacity),
-      dividerColor: isLight ? const Color(0x33000000) : const Color(0x33FFFFFF),
-      textPrimary: isLight ? const Color(0xFF111111) : const Color(0xFFEEEFF2),
-      textSecondary:
-          isLight ? const Color(0xFF444444) : const Color(0xFF8B8FA3),
-      textMuted: isLight ? const Color(0xFF777777) : const Color(0xFF5A5E73),
+      bgDeepest: const Color(0xFF0A0A0F).withValues(alpha: opacity),
+      bgPrimary: const Color(0xFF0F1117).withValues(alpha: opacity),
+      bgSecondary: const Color(0xFF151822).withValues(alpha: opacity),
+      bgTertiary: const Color(0xFF1B1F2E).withValues(alpha: opacity),
+      bgHover: const Color(0xFF222738).withValues(alpha: opacity),
+      dividerColor: const Color(0x33FFFFFF),
+      textPrimary: const Color(0xFFEEEFF2),
+      textSecondary: const Color(0xFF8B8FA3),
+      textMuted: const Color(0xFF5A5E73),
       radiusSm: 12.0,
       radiusMd: 24.0,
       radiusLg: 32.0,
@@ -329,9 +317,7 @@ class AppThemeData {
 final themeProvider = Provider<AppThemeData>((ref) {
   final settings = ref.watch(settingsProvider);
   if (settings.uiTheme == AppUiTheme.liquidGlass) {
-    bool isLightBg = settings.backgroundTheme == AppBackgroundTheme.liquidLight;
-    return AppThemeData.getGlassTheme(
-        isLight: isLightBg, opacity: settings.glassOpacity);
+    return AppThemeData.getGlassTheme(opacity: settings.glassOpacity);
   }
   return AppThemeData.defaultTheme;
 });

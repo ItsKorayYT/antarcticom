@@ -127,10 +127,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return Container(
         width: 240,
         color: settings.uiTheme == AppUiTheme.liquidGlass
-            ? theme.bgSecondary.withValues(
-                alpha: theme.bgSecondary.a * settings.liquidWindowOpacity)
-            : theme.bgSecondary
-                .withValues(alpha: theme.bgSecondary.a * settings.glassOpacity),
+            ? theme.bgPrimary.withValues(
+                alpha: theme.bgPrimary.a * settings.liquidWindowOpacity)
+            : theme.bgPrimary
+                .withValues(alpha: theme.bgPrimary.a * settings.glassOpacity),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -359,9 +359,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return Scaffold(
-      backgroundColor: settings.uiTheme == AppUiTheme.liquidGlass
-          ? Colors.transparent
-          : theme.bgDeepest,
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           // Layout
