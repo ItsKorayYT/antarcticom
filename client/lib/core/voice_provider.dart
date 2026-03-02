@@ -249,13 +249,9 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       debugPrint('Remote track received from SFU: ${event.track.id}, '
           'kind: ${event.track.kind}, streams: ${event.streams.length}');
 
-      // Only process audio tracks — skip any video/unknown tracks
-      if (event.track.kind != 'audio') {
-        debugPrint('Skipping non-audio track: ${event.track.kind}');
-        return;
-      }
-
-      // Enable the track for playback
+      // The SFU only forwards audio, but webrtc-rs may report the track
+      // as 'video' due to how replace_track handles transceiver types.
+      // Accept all tracks — enable for playback.
       event.track.enabled = !state.deafened;
 
       if (event.streams.isNotEmpty) {
@@ -496,7 +492,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
   void _muteRemoteStreams(bool mute) {
     for (final stream in _remoteStreams.values) {
-      for (final track in stream.getAudioTracks()) {
+      for (final track in stream.getTracks()) {
         track.enabled = !mute;
       }
     }
