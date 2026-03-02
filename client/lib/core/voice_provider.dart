@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -323,21 +323,11 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       }
     }
 
-    // Pre-allocate recvonly audio transceivers so the SFU can fill them
-    // with other users' audio tracks via replace_track on the sendonly side.
-    final currentParticipants = state.participantsFor(channelId).length;
-    final recvSlots = max(currentParticipants, 1); // At least one slot
-    for (int i = 0; i < recvSlots; i++) {
-      await pc.addTransceiver(
-        kind: RTCRtpMediaType.RTCRtpMediaTypeAudio,
-        init: RTCRtpTransceiverInit(
-          direction: TransceiverDirection.RecvOnly,
-        ),
-      );
-    }
-    debugPrint('Added $recvSlots recvonly audio transceivers');
+    // The SFU adds other users' tracks via add_track on its side,
+    // creating new m= sections in the answer SDP automatically.
+    // No need to pre-allocate recvonly transceivers on the client.
 
-    // Create the offer (local audio + recvonly audio transceivers)
+    // Create the offer (local audio only — SFU adds remote tracks in the answer)
     final offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 

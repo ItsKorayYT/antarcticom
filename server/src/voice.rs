@@ -190,15 +190,10 @@ impl SfuServer {
         pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?).await?;
 
         // Step 2: Subscribe to existing users' tracks.
-        // The client's offer contains `recvonly` transceivers, which appear as
-        // `Sendonly` on the server side (direction is from the local perspective).
-        // We find those and attach existing users' tracks to their senders.
+        // Use add_track to add each other user's track as a new sender.
+        // This creates new m= sections in the answer SDP, so the client
+        // doesn't need to pre-allocate recvonly transceivers.
         let mut subscribed_count = 0u32;
-        let transceivers = pc.get_transceivers().await;
-        
-        let mut available_transceivers = transceivers.into_iter().filter(|t| {
-            t.direction() == webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly
-        });
 
         for other_user_entry in channel.users.iter() {
             let other_user = other_user_entry.value();
@@ -207,18 +202,14 @@ impl SfuServer {
             }
             let other_track_lock = other_user.my_track.read().await;
             if let Some(other_track) = &*other_track_lock {
-                if let Some(transceiver) = available_transceivers.next() {
-                    match transceiver.sender().await.replace_track(Some(other_track.clone())).await {
-                        Ok(_) => {
-                            subscribed_count += 1;
-                            tracing::info!("Subscribed user {} to track from user {} via transceiver", user_id, other_user.user_id);
-                        }
-                        Err(e) => {
-                            tracing::error!("Error replacing track on transceiver for {}: {}", other_user.user_id, e);
-                        }
+                match pc.add_track(other_track.clone()).await {
+                    Ok(_sender) => {
+                        subscribed_count += 1;
+                        tracing::info!("Subscribed user {} to track from user {} via add_track", user_id, other_user.user_id);
                     }
-                } else {
-                    tracing::warn!("No available sendonly transceiver for user {}'s track!", other_user.user_id);
+                    Err(e) => {
+                        tracing::error!("Error adding track for user {}: {}", other_user.user_id, e);
+                    }
                 }
             }
         }
