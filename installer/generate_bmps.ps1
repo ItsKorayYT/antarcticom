@@ -2,35 +2,41 @@
 Add-Type -AssemblyName System.Drawing
 
 $installerDir = "C:\Users\koray\Desktop\Newcord\installer"
+$iconPath = "C:\Users\koray\Desktop\Newcord\client\assets\icon.png"
 
-function Create-GradientBmp {
-    param([int]$width, [int]$height, [string]$filename, [string]$text)
+function Create-ModernBmp {
+    param([int]$width, [int]$height, [string]$filename, [bool]$isBanner)
 
     $bmp = New-Object System.Drawing.Bitmap($width, $height)
     $graphics = [System.Drawing.Graphics]::FromImage($bmp)
     
-    # Create gradient brush (Deep Space / Cosmic Theme)
+    # Background color matches the app icon background (#0A0A0F)
+    $bgColor = [System.Drawing.Color]::FromArgb(255, 10, 10, 15)
+    $brush = New-Object System.Drawing.SolidBrush($bgColor)
     $rect = New-Object System.Drawing.Rectangle(0, 0, $width, $height)
-    $color2 = [System.Drawing.Color]::FromArgb(255, 108, 92, 231) # Accent Primary Purple
-    $brush = New-Object System.Drawing.SolidBrush($color2)
-    
     $graphics.FillRectangle($brush, $rect)
 
-    # Draw Text if provided
-    if ($text) {
-        $font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
-        $brushText = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)
+    # Load and draw the app icon
+    if (Test-Path $iconPath) {
+        $iconBmp = [System.Drawing.Image]::FromFile($iconPath)
         
-        # Center text vertically, but rotated for banner? No, just horizontal text near bottom or string format
-        $stringFormat = New-Object System.Drawing.StringFormat
-        $stringFormat.Alignment = [System.Drawing.StringAlignment]::Center
-        $stringFormat.LineAlignment = [System.Drawing.StringAlignment]::Center
+        # Calculate scaling and positioning to center the icon
+        if ($isBanner) {
+            # For banner (164x314), scale icon to fit width with some padding
+            $iconSize = $width - 40
+            $x = ($width - $iconSize) / 2
+            $y = ($height - $iconSize) / 2
+            $graphics.DrawImage($iconBmp, $x, $y, $iconSize, $iconSize)
+        } else {
+            # For small logo (55x55), scale to fit entirely
+            $graphics.DrawImage($iconBmp, 0, 0, $width, $height)
+        }
         
-        $rectF = New-Object System.Drawing.RectangleF(0, 0, $width, $height)
-        $graphics.DrawString($text, $font, $brushText, $rectF, $stringFormat)
+        $iconBmp.Dispose()
     }
 
     $graphics.Dispose()
+    $brush.Dispose()
     
     $outPath = Join-Path $installerDir $filename
     $bmp.Save($outPath, [System.Drawing.Imaging.ImageFormat]::Bmp)
@@ -39,9 +45,9 @@ function Create-GradientBmp {
 }
 
 # WizardImageFile: 164x314 (Left Banner)
-Create-GradientBmp -width 164 -height 314 -filename "banner.bmp" -text "Antarcticom"
+Create-ModernBmp -width 164 -height 314 -filename "banner.bmp" -isBanner $true
 
 # WizardSmallImageFile: 55x55 (Top Right Logo)
-Create-GradientBmp -width 55 -height 55 -filename "logo.bmp" -text "AC"
+Create-ModernBmp -width 55 -height 55 -filename "logo.bmp" -isBanner $false
 
 Write-Host "Done."
