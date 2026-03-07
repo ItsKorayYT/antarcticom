@@ -216,6 +216,10 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     // Server payload is just the SDP string in our current implementation
     final String sdp = payload is String ? payload : payload['sdp'];
     debugPrint('[Voice] Answer SDP length: ${sdp.length}');
+
+    // Diagnostic: log all m= lines so we can see what tracks are in the answer
+    final mLines = sdp.split('\n').where((l) => l.startsWith('m=')).toList();
+    debugPrint('[Voice] Answer m= lines (${mLines.length}): $mLines');
     try {
       await _serverConnection!
           .setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
