@@ -13,6 +13,7 @@ use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::track::track_local::TrackLocalWriter;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_remote::TrackRemote;
+use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 
 /// Represents a user connected to the SFU
 pub struct SfuUser {
@@ -143,8 +144,18 @@ impl SfuServer {
                         existing_track.clone()
                     } else {
                         drop(existing);
+                        // Use an explicit audio/opus capability rather than the
+                        // remote codec.capability, which webrtc-rs may put into
+                        // an m=video section in the answer SDP.
+                        let audio_capability = RTCRtpCodecCapability {
+                            mime_type: "audio/opus".to_string(),
+                            clock_rate: 48000,
+                            channels: 2,
+                            sdp_fmtp_line: "minptime=10;useinbandfec=1".to_string(),
+                            rtcp_feedback: vec![],
+                        };
                         let new_track = Arc::new(TrackLocalStaticRTP::new(
-                            codec.capability,
+                            audio_capability,
                             track_id.clone(),
                             track.stream_id(),
                         ));
@@ -228,8 +239,13 @@ impl SfuServer {
         let local_desc = pc.local_description().await
             .ok_or_else(|| anyhow::anyhow!("No local description after ICE gathering"))?;
 
-        tracing::info!("SFU answer ready for user {} ({} bytes)", user_id, local_desc.sdp.len());
-        Ok(local_desc.sdp)
+        // Post-process the SDP: webrtc-rs may place audio/opus tracks inside
+        // m=video sections.  Fix them to m=audio so client-side WebRTC stacks
+        // correctly route the demuxed media to the audio pipeline.
+        let fixed_sdp = fix_opus_video_mlines(&local_desc.sdp);
+
+        tracing::info!("SFU answer ready for user {} ({} bytes)", user_id, fixed_sdp.len());
+        Ok(fixed_sdp)
     }
 
 
@@ -280,4 +296,75 @@ impl SfuServer {
             }
         }
     }
+}
+
+/// Fix SDP where webrtc-rs places opus audio in `m=video` sections.
+///
+/// Scans each media section. If a section starts with `m=video` but
+/// the only codec present is `opus`, rewrite the media line to `m=audio`.
+fn fix_opus_video_mlines(sdp: &str) -> String {
+    let mut result = String::with_capacity(sdp.len());
+    let mut pending_mline: Option<String> = None;
+    let mut section_lines: Vec<String> = Vec::new();
+    let mut has_opus = false;
+    let mut has_video_codec = false;
+
+    for line in sdp.lines() {
+        if line.starts_with("m=") {
+            // Flush previous section
+            if let Some(mline) = pending_mline.take() {
+                let fixed = if mline.starts_with("m=video") && has_opus && !has_video_codec {
+                    tracing::info!("SDP fix: rewriting m=video → m=audio for opus-only section");
+                    mline.replacen("m=video", "m=audio", 1)
+                } else {
+                    mline
+                };
+                result.push_str(&fixed);
+                result.push_str("\r\n");
+                for sl in section_lines.drain(..) {
+                    result.push_str(&sl);
+                    result.push_str("\r\n");
+                }
+            }
+
+            pending_mline = Some(line.to_string());
+            has_opus = false;
+            has_video_codec = false;
+        } else if pending_mline.is_some() {
+            // Check for codec indicators
+            let lower = line.to_lowercase();
+            if lower.contains("opus") {
+                has_opus = true;
+            }
+            // Common video codecs — if any are present, it's a genuine video section
+            if lower.contains("h264") || lower.contains("vp8") || lower.contains("vp9")
+                || lower.contains("av1") || lower.contains("h265")
+            {
+                has_video_codec = true;
+            }
+            section_lines.push(line.to_string());
+        } else {
+            // Session-level lines before first m=
+            result.push_str(line);
+            result.push_str("\r\n");
+        }
+    }
+
+    // Flush last section
+    if let Some(mline) = pending_mline {
+        let fixed = if mline.starts_with("m=video") && has_opus && !has_video_codec {
+            tracing::info!("SDP fix: rewriting m=video → m=audio for opus-only section");
+            mline.replacen("m=video", "m=audio", 1)
+        } else {
+            mline
+        };
+        result.push_str(&fixed);
+        result.push_str("\r\n");
+        for sl in section_lines {
+            result.push_str(&sl);
+            result.push_str("\r\n");
+        }
+    }
+
+    result
 }

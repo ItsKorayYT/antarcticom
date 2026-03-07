@@ -128,6 +128,9 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   /// Whether a renegotiation is already in progress.
   bool _renegotiating = false;
 
+  /// Stream IDs currently being set up (prevents async race duplicates).
+  final Set<String> _pendingStreamSetups = {};
+
   static const String serverId = '00000000-0000-0000-0000-000000000000';
 
   VoiceNotifier(this._api, this._primarySocket, this._connMgr,
@@ -316,10 +319,13 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     final streamId = stream.id;
 
     // Only set up one renderer per STREAM (not per track)
-    if (_audioRenderers.containsKey(streamId)) {
-      debugPrint('[Voice] Stream $streamId already has a renderer, skipping');
+    if (_audioRenderers.containsKey(streamId) ||
+        _pendingStreamSetups.contains(streamId)) {
+      debugPrint(
+          '[Voice] Stream $streamId already has/pending a renderer, skipping');
       return;
     }
+    _pendingStreamSetups.add(streamId);
 
     _remoteStreams[streamId] = stream;
 
@@ -341,6 +347,8 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
           '(audioTracks=${stream.getAudioTracks().length})');
     } catch (e) {
       debugPrint('[Voice] Renderer setup error for stream $streamId: $e');
+    } finally {
+      _pendingStreamSetups.remove(streamId);
     }
   }
 
