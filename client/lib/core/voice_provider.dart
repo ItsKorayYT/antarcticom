@@ -203,21 +203,23 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
     // Guard: only set remote answer when we have a pending offer
     final signalingState = _serverConnection!.signalingState;
-    debugPrint('handleAnswer: PC signaling state = $signalingState');
+    debugPrint('[Voice] handleAnswer: signaling=$signalingState');
     if (signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
       debugPrint(
-          'Ignoring answer — PC is in $signalingState, not have-local-offer');
+          '[Voice] Ignoring answer — PC is in $signalingState, not have-local-offer');
       return;
     }
 
     // Server payload is just the SDP string in our current implementation
     final String sdp = payload is String ? payload : payload['sdp'];
+    debugPrint('[Voice] Answer SDP length: ${sdp.length}');
     try {
       await _serverConnection!
           .setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
-      debugPrint('Remote description (answer) set successfully');
+      debugPrint('[Voice] Remote description (answer) set OK — '
+          'expecting onTrack/onAddStream callbacks');
     } catch (e) {
-      debugPrint('setRemoteDescription error: $e');
+      debugPrint('[Voice] setRemoteDescription error: $e');
     }
   }
 
@@ -246,8 +248,9 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
     // Handle incoming remote tracks (from other users, forwarded by SFU)
     pc.onTrack = (RTCTrackEvent event) async {
-      debugPrint('Remote track received from SFU: ${event.track.id}, '
-          'kind: ${event.track.kind}, streams: ${event.streams.length}');
+      debugPrint('[Voice] onTrack: id=${event.track.id}, '
+          'kind=${event.track.kind}, streams=${event.streams.length}, '
+          'enabled=${event.track.enabled}');
 
       // The SFU only forwards audio, but webrtc-rs may report the track
       // as 'video' due to how replace_track handles transceiver types.
@@ -256,32 +259,26 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
       if (event.streams.isNotEmpty) {
         final stream = event.streams[0];
-        final streamId = stream.id;
-
-        // Only set up one renderer per STREAM (not per track)
-        if (!_audioRenderers.containsKey(streamId)) {
-          _remoteStreams[streamId] = stream;
-
-          try {
-            final renderer = RTCVideoRenderer();
-            await renderer.initialize();
-
-            // Set srcObject FIRST
-            renderer.srcObject = stream;
-
-            _audioRenderers[streamId] = renderer;
-            debugPrint(
-                'Audio renderer created and initialized for stream $streamId');
-          } catch (e) {
-            debugPrint('Audio renderer setup error: $e');
-          }
-        }
-
-        // Ensure all audio tracks in the stream are enabled
-        for (final audioTrack in stream.getAudioTracks()) {
-          audioTrack.enabled = !state.deafened;
-        }
+        _setupRemoteStream(stream);
       }
+    };
+
+    // onAddStream is critical for audio playback on desktop platforms.
+    // Some flutter_webrtc backends (especially Windows) only activate
+    // audio output when a stream is attached via this callback.
+    // ignore: deprecated_member_use
+    pc.onAddStream = (MediaStream stream) {
+      debugPrint('[Voice] onAddStream: streamId=${stream.id}, '
+          'audioTracks=${stream.getAudioTracks().length}, '
+          'videoTracks=${stream.getVideoTracks().length}');
+      _setupRemoteStream(stream);
+    };
+
+    // Handle remote stream removal
+    // ignore: deprecated_member_use
+    pc.onRemoveStream = (MediaStream stream) {
+      debugPrint('[Voice] onRemoveStream: ${stream.id}');
+      _teardownRemoteStream(stream.id);
     };
 
     // Handle ICE candidates — send to server
@@ -301,7 +298,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     };
 
     pc.onIceConnectionState = (RTCIceConnectionState iceState) {
-      debugPrint('ICE state with SFU: $iceState');
+      debugPrint('[Voice] ICE state: $iceState');
       if (iceState == RTCIceConnectionState.RTCIceConnectionStateConnected) {
         state = state.copyWith(isConnecting: false);
       } else if (iceState ==
@@ -311,6 +308,54 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     };
 
     return pc;
+  }
+
+  /// Set up a remote stream for audio playback.
+  /// Called from both onTrack and onAddStream — deduplicates by stream ID.
+  Future<void> _setupRemoteStream(MediaStream stream) async {
+    final streamId = stream.id;
+
+    // Only set up one renderer per STREAM (not per track)
+    if (_audioRenderers.containsKey(streamId)) {
+      debugPrint('[Voice] Stream $streamId already has a renderer, skipping');
+      return;
+    }
+
+    _remoteStreams[streamId] = stream;
+
+    // Enable all audio tracks
+    for (final audioTrack in stream.getAudioTracks()) {
+      audioTrack.enabled = !state.deafened;
+      debugPrint(
+          '[Voice] Audio track ${audioTrack.id} enabled=${audioTrack.enabled}');
+    }
+
+    // On desktop (Windows/macOS/Linux), an RTCVideoRenderer is required
+    // to activate audio output — even for audio-only streams.
+    try {
+      final renderer = RTCVideoRenderer();
+      await renderer.initialize();
+      renderer.srcObject = stream;
+      _audioRenderers[streamId] = renderer;
+      debugPrint('[Voice] Renderer created for stream $streamId '
+          '(audioTracks=${stream.getAudioTracks().length})');
+    } catch (e) {
+      debugPrint('[Voice] Renderer setup error for stream $streamId: $e');
+    }
+  }
+
+  /// Tear down renderer and stream reference for a removed stream.
+  void _teardownRemoteStream(String streamId) {
+    _remoteStreams.remove(streamId);
+    final renderer = _audioRenderers.remove(streamId);
+    if (renderer != null) {
+      try {
+        renderer.srcObject = null;
+        renderer.dispose();
+      } catch (e) {
+        debugPrint('[Voice] Renderer teardown error: $e');
+      }
+    }
   }
 
   Future<void> _initiateSfuCall(String channelId) async {
@@ -579,16 +624,19 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     _renegotiating = true;
     state = state.copyWith(isConnecting: true);
 
-    debugPrint('Renegotiating with SFU for channel $channelId');
+    debugPrint('[Voice] Renegotiating with SFU for channel $channelId');
     try {
       // Only close the peer connection and renderers — preserve the local
       // audio stream so we don't lose mic access or trigger re-prompts.
       try {
         await _serverConnection?.close();
       } catch (e) {
-        debugPrint('PC close warning (safe to ignore): $e');
+        debugPrint('[Voice] PC close warning (safe to ignore): $e');
       }
       _serverConnection = null;
+
+      debugPrint('[Voice] Cleaning up ${_remoteStreams.length} streams, '
+          '${_audioRenderers.length} renderers');
       _remoteStreams.clear();
 
       final renderers = _audioRenderers.values.toList();
@@ -598,7 +646,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
           renderer.srcObject = null;
           await renderer.dispose();
         } catch (e) {
-          debugPrint('Renderer dispose warning (safe to ignore): $e');
+          debugPrint('[Voice] Renderer dispose warning (safe to ignore): $e');
         }
       }
 
