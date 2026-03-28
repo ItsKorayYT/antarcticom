@@ -227,6 +227,41 @@ impl SfuServer {
             },
         ));
 
+        let ws_sender_ice = self.ws_sender.read().await.clone();
+        let user_id_ice = user_id;
+        let channel_id_ice = channel_id;
+        pc.on_ice_candidate(Box::new(
+            move |candidate: Option<webrtc::ice_transport::ice_candidate::RTCIceCandidate>| {
+                let ws_sender_c = ws_sender_ice.clone();
+                Box::pin(async move {
+                    if let Some(c) = candidate {
+                        match c.to_json() {
+                            Ok(json) => {
+                                if let Some(ref sender) = ws_sender_c {
+                                    let event = serde_json::json!({
+                                        "type": "WebRTCSignal",
+                                        "data": {
+                                            "from_user_id": "00000000-0000-0000-0000-000000000000",
+                                            "to_user_id": user_id_ice.to_string(),
+                                            "channel_id": channel_id_ice.to_string(),
+                                            "signal_type": "ice",
+                                            "payload": {
+                                                "candidate": json.candidate,
+                                                "sdpMid": json.sdp_mid,
+                                                "sdpMLineIndex": json.sdp_mline_index,
+                                            }
+                                        }
+                                    });
+                                    sender(user_id_ice, event);
+                                }
+                            }
+                            Err(e) => tracing::error!("Failed to serialize ICE candidate: {}", e),
+                        }
+                    }
+                })
+            },
+        ));
+
         // Step 1: Set remote description (the client's offer)
         pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?)
             .await?;
