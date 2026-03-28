@@ -26,6 +26,8 @@ pub struct SfuUser {
     /// The local track this user's audio is written to.
     /// Other users subscribe to this track to hear this user.
     pub published_track: Arc<RwLock<Option<Arc<TrackLocalStaticRTP>>>>,
+    /// Keep track of senders we added to this user's PC, so we can remove them
+    pub senders: Arc<DashMap<Uuid, Arc<webrtc::rtp_transceiver::rtp_sender::RTCRtpSender>>>,
 }
 
 /// Represents a voice channel in the SFU.
@@ -128,6 +130,7 @@ impl SfuServer {
             user_id,
             peer_connection: pc.clone(),
             published_track: Arc::new(RwLock::new(None)),
+            senders: Arc::new(DashMap::new()),
         });
 
         channel.users.insert(user_id, user.clone());
@@ -194,19 +197,6 @@ impl SfuServer {
             })
         }));
 
-        // ICE gathering completion notifier
-        let gather_notify = Arc::new(tokio::sync::Notify::new());
-        let gather_notify_c = gather_notify.clone();
-        pc.on_ice_gathering_state_change(Box::new(move |state| {
-            let notify = gather_notify_c.clone();
-            Box::pin(async move {
-                tracing::debug!("SFU ICE gathering state: {:?}", state);
-                if state == webrtc::ice_transport::ice_gatherer_state::RTCIceGathererState::Complete {
-                    notify.notify_one();
-                }
-            })
-        }));
-
         // Step 1: Set remote description (the client's offer)
         pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?).await?;
 
@@ -220,7 +210,8 @@ impl SfuServer {
             let other_track = other_user.published_track.read().await;
             if let Some(track) = &*other_track {
                 match pc.add_track(track.clone()).await {
-                    Ok(_) => {
+                    Ok(sender) => {
+                        user.senders.insert(other_user.user_id, sender);
                         subscribed_count += 1;
                         tracing::info!(
                             "Subscribed user {} to track from user {}",
@@ -242,14 +233,9 @@ impl SfuServer {
         let answer = pc.create_answer(None).await?;
         pc.set_local_description(answer).await?;
 
-        // Wait for ICE gathering (timeout 3s)
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(3),
-            gather_notify.notified(),
-        ).await;
-
+        // Trickle ICE: Don't wait for gathering, send current local description immediately
         let local_desc = pc.local_description().await
-            .ok_or_else(|| anyhow::anyhow!("No local description after ICE gathering"))?;
+            .ok_or_else(|| anyhow::anyhow!("No local description available"))?;
 
         tracing::info!("SFU answer ready for user {} ({} bytes)", user_id, local_desc.sdp.len());
 
@@ -292,7 +278,8 @@ impl SfuServer {
 
                 // Add the new track to the other user's PC
                 match other_user.peer_connection.add_track(track.clone()).await {
-                    Ok(_) => {
+                    Ok(sender) => {
+                        other_user.senders.insert(user_id, sender);
                         tracing::info!(
                             "Added user {}'s track to user {}'s PC",
                             user_id, other_user.user_id
@@ -342,23 +329,7 @@ impl SfuServer {
         let offer = user.peer_connection.create_offer(None).await?;
         user.peer_connection.set_local_description(offer).await?;
 
-        // Wait for ICE gathering
-        let gather_notify = Arc::new(tokio::sync::Notify::new());
-        let gather_notify_c = gather_notify.clone();
-        user.peer_connection.on_ice_gathering_state_change(Box::new(move |state| {
-            let notify = gather_notify_c.clone();
-            Box::pin(async move {
-                if state == webrtc::ice_transport::ice_gatherer_state::RTCIceGathererState::Complete {
-                    notify.notify_one();
-                }
-            })
-        }));
-
-        let _ = tokio::time::timeout(
-            std::time::Duration::from_secs(3),
-            gather_notify.notified(),
-        ).await;
-
+        // Trickle ICE: send immediately without waiting for gathering
         let local_desc = user.peer_connection.local_description().await
             .ok_or_else(|| anyhow::anyhow!("No local description for renegotiation"))?;
 
@@ -471,22 +442,26 @@ impl SfuServer {
             let had_track = user.published_track.read().await.is_some();
 
             if had_track {
-                // We need to renegotiate with remaining users to remove the track.
-                // Since webrtc-rs doesn't have a clean remove_track-by-reference,
-                // we do a full renegotiation for each remaining user by recreating
-                // their subscriptions. However, for simplicity and reliability,
-                // we just let the track's RTP forwarding loop end naturally (it
-                // will break when read_rtp returns an error on the closed PC).
-                // The remaining users' PCs will have a dead track that produces
-                // silence — this is acceptable and matches Discord's behavior
-                // (you just stop hearing the person).
-                //
-                // For a cleaner approach, we could track senders and remove them,
-                // but that adds complexity. The current approach is robust.
                 tracing::info!(
-                    "User {} had a published track; remaining users will stop receiving audio naturally",
+                    "User {} had a published track; removing it from all other users' PCs",
                     user_id
                 );
+
+                // We need to renegotiate with remaining users to remove the track.
+                for other_entry in channel.users.iter() {
+                    let other_user = other_entry.value();
+                    if let Some((_, sender)) = other_user.senders.remove(&user_id) {
+                        let _ = other_user.peer_connection.remove_track(&sender).await;
+                        // Trigger renegotiation so the client knows the track is gone
+                        if let Err(e) = Self::create_and_send_offer(
+                            &other_user,
+                            channel_id,
+                            &self.ws_sender.read().await.clone(),
+                        ).await {
+                            tracing::error!("Failed to reneg after remove: {}", e);
+                        }
+                    }
+                }
             }
         }
 

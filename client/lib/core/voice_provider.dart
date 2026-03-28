@@ -241,38 +241,13 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       final answer = await _serverConnection!.createAnswer();
       await _serverConnection!.setLocalDescription(answer);
 
-      // Wait for ICE gathering to complete
-      final completer = Completer<void>();
-      _serverConnection!.onIceGatheringState =
-          (RTCIceGatheringState gatheringState) {
-        if (gatheringState ==
-                RTCIceGatheringState.RTCIceGatheringStateComplete &&
-            !completer.isCompleted) {
-          completer.complete();
-        }
-      };
-
-      await completer.future.timeout(
-        const Duration(seconds: 3),
-        onTimeout: () {
-          debugPrint('[Voice] ICE gathering timed out for renegotiation answer');
-        },
-      );
-
-      if (_serverConnection == null || state.currentChannelId == null) {
-        debugPrint('[Voice] Connection closed during renegotiation, aborting');
-        return;
-      }
-
-      final updatedDesc = await _serverConnection!.getLocalDescription();
-      final sdpToSend = updatedDesc?.sdp ?? answer.sdp!;
-
-      debugPrint('[Voice] Sending renegotiation answer (${sdpToSend.length} bytes)');
+      // Send answer immediately (Trickle ICE)
+      debugPrint('[Voice] Sending renegotiation answer (${answer.sdp!.length} bytes)');
       _sendSignal(
         toUserId: serverId,
         channelId: state.currentChannelId!,
         signalType: 'answer',
-        payload: sdpToSend,
+        payload: answer.sdp,
       );
     } catch (e) {
       debugPrint('[Voice] Server offer handling error: $e');
@@ -424,38 +399,13 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     final offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    // Wait for ICE gathering to complete
-    final completer = Completer<void>();
-    pc.onIceGatheringState = (RTCIceGatheringState gatheringState) {
-      if (gatheringState ==
-              RTCIceGatheringState.RTCIceGatheringStateComplete &&
-          !completer.isCompleted) {
-        completer.complete();
-      }
-    };
-
-    await completer.future.timeout(
-      const Duration(seconds: 3),
-      onTimeout: () {
-        debugPrint('[Voice] ICE gathering timed out, sending with available candidates');
-      },
-    );
-
-    // Guard: PC may have been cleaned up during ICE gathering
-    if (_serverConnection == null) {
-      debugPrint('[Voice] PC was closed during ICE gathering, aborting');
-      return;
-    }
-
-    final updatedDesc = await pc.getLocalDescription();
-    final sdpToSend = updatedDesc?.sdp ?? offer.sdp!;
-
-    debugPrint('[Voice] Sending SFU offer (${sdpToSend.length} bytes)');
+    // Send offer immediately (Trickle ICE)
+    debugPrint('[Voice] Sending SFU offer (${offer.sdp!.length} bytes)');
     _sendSignal(
       toUserId: serverId,
       channelId: channelId,
       signalType: 'offer',
-      payload: sdpToSend,
+      payload: offer.sdp,
     );
   }
 
