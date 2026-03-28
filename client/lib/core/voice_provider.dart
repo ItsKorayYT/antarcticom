@@ -148,6 +148,21 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     super.dispose();
   }
 
+  String _mungeSdp(String sdp) {
+    // Force Opus to use stereo and maximum bitrate for highest quality
+    var munged = sdp.replaceAll(
+      'useinbandfec=1',
+      'useinbandfec=1; stereo=1; sprop-stereo=1; maxaveragebitrate=510000',
+    );
+    if (!munged.contains('maxaveragebitrate')) {
+      munged = munged.replaceAll(
+        'minptime=10',
+        'minptime=10; stereo=1; sprop-stereo=1; maxaveragebitrate=510000; useinbandfec=1',
+      );
+    }
+    return munged;
+  }
+
   void _handleEvent(WsEvent event) {
     if (event.type == 'VoiceStateUpdate' && event.data != null) {
       _handleVoiceUpdate(event.data!);
@@ -239,15 +254,18 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
           .setRemoteDescription(RTCSessionDescription(sdp, 'offer'));
 
       final answer = await _serverConnection!.createAnswer();
-      await _serverConnection!.setLocalDescription(answer);
+      final mungedSdp = _mungeSdp(answer.sdp!);
+      final modifiedAnswer = RTCSessionDescription(mungedSdp, answer.type);
+
+      await _serverConnection!.setLocalDescription(modifiedAnswer);
 
       // Send answer immediately (Trickle ICE)
-      debugPrint('[Voice] Sending renegotiation answer (${answer.sdp!.length} bytes)');
+      debugPrint('[Voice] Sending renegotiation answer (${modifiedAnswer.sdp!.length} bytes)');
       _sendSignal(
         toUserId: serverId,
         channelId: state.currentChannelId!,
         signalType: 'answer',
-        payload: answer.sdp,
+        payload: modifiedAnswer.sdp,
       );
     } catch (e) {
       debugPrint('[Voice] Server offer handling error: $e');
@@ -397,15 +415,18 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
     // Create offer and send to server
     final offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
+    final mungedSdp = _mungeSdp(offer.sdp!);
+    final modifiedOffer = RTCSessionDescription(mungedSdp, offer.type);
+
+    await pc.setLocalDescription(modifiedOffer);
 
     // Send offer immediately (Trickle ICE)
-    debugPrint('[Voice] Sending SFU offer (${offer.sdp!.length} bytes)');
+    debugPrint('[Voice] Sending SFU offer (${modifiedOffer.sdp!.length} bytes)');
     _sendSignal(
       toUserId: serverId,
       channelId: channelId,
       signalType: 'offer',
-      payload: offer.sdp,
+      payload: modifiedOffer.sdp,
     );
   }
 
@@ -491,6 +512,10 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
         'echoCancellation': settings.enableEchoCancellation,
         'noiseSuppression': settings.enableNoiseSuppression,
         'autoGainControl': true,
+        'sampleRate': 48000,
+        'channelCount': 2,
+        'highpassFilter': false,
+        'typingNoiseDetection': false,
         if (settings.selectedInputDeviceId != null)
           'deviceId': {'exact': settings.selectedInputDeviceId},
       },

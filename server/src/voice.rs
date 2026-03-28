@@ -182,7 +182,7 @@ impl SfuServer {
                         mime_type: "audio/opus".to_string(),
                         clock_rate: 48000,
                         channels: 2,
-                        sdp_fmtp_line: "minptime=10;useinbandfec=1".to_string(),
+                        sdp_fmtp_line: "minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=510000".to_string(),
                         rtcp_feedback: vec![],
                     };
                     let local_track = Arc::new(TrackLocalStaticRTP::new(
