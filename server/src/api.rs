@@ -80,12 +80,30 @@ const TOKEN_CACHE_TTL_SECS: u64 = 60;
 impl AppState {
     pub fn new(db: DbPool, redis: Option<redis::Client>, config: AppConfig) -> Self {
         let voice_public_ip = config.voice.public_ip.clone();
+        let ws_sessions: Arc<DashMap<Uuid, broadcast::Sender<String>>> = Arc::new(DashMap::new());
+        let sfu = Arc::new(crate::voice::SfuServer::new(voice_public_ip).expect("Failed to initialize SFU"));
+
+        // Wire up the SFU's ws_sender so it can push signaling messages to clients.
+        {
+            let ws_sessions_c = ws_sessions.clone();
+            let sfu_c = sfu.clone();
+            tokio::spawn(async move {
+                let sender: crate::voice::WsSenderFn = Arc::new(move |target_user_id: Uuid, event: serde_json::Value| {
+                    if let Some(tx) = ws_sessions_c.get(&target_user_id) {
+                        let json = serde_json::to_string(&event).unwrap_or_default();
+                        let _ = tx.send(json);
+                    }
+                });
+                sfu_c.set_ws_sender(sender).await;
+            });
+        }
+
         Self {
             db,
             redis,
             config,
             snowflake: Arc::new(SnowflakeGenerator::new(1)),
-            ws_sessions: Arc::new(DashMap::new()),
+            ws_sessions,
             channel_subs: Arc::new(DashMap::new()),
             presence: Arc::new(PresenceManager::new()),
             http_client: reqwest::Client::builder()
@@ -95,7 +113,7 @@ impl AppState {
             token_cache: Arc::new(DashMap::new()),
             hub_public_key: Arc::new(RwLock::new(None)),
             voice_states: Arc::new(DashMap::new()),
-            sfu: Arc::new(crate::voice::SfuServer::new(voice_public_ip).expect("Failed to initialize SFU")),
+            sfu,
         }
     }
 
@@ -1317,6 +1335,13 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
                                                 state_for_recv.broadcast_to_user(&user_id, &answer);
                                             }
                                             Err(e) => tracing::error!("SFU error handling offer: {}", e),
+                                        }
+                                    }
+                                } else if signal_type == "answer" {
+                                    // Client is responding to a server-initiated renegotiation offer
+                                    if let Some(sdp) = payload.as_str() {
+                                        if let Err(e) = state_for_recv.sfu.handle_answer(channel_id, user_id, sdp.to_string()).await {
+                                            tracing::error!("SFU error handling answer: {}", e);
                                         }
                                     }
                                 } else if signal_type == "ice" {

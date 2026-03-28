@@ -225,16 +225,6 @@ impl Permissions {
 
 // ─── Voice ──────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
-pub struct VoiceSession {
-    pub id: Uuid,
-    pub channel_id: Uuid,
-    pub user_id: Uuid,
-    pub sfu_endpoint: String,
-    pub joined_at: DateTime<Utc>,
-    pub muted: bool,
-    pub deafened: bool,
-}
 
 /// Lightweight voice participant for signaling (no DB backing).
 #[derive(Debug, Clone, Serialize, Deserialize)]

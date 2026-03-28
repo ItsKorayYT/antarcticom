@@ -113,54 +113,6 @@ pub fn decrypt_aes256gcm(
     Ok(plaintext.to_vec())
 }
 
-// ─── Voice Frame Encryption ────────────────────────────────────────────────
-
-/// Encrypt a single Opus voice frame for transmission.
-///
-/// Uses AES-256-GCM with a frame counter as nonce to ensure uniqueness
-/// without random nonce generation overhead on the hot path.
-pub fn encrypt_voice_frame(
-    key: &[u8; 32],
-    frame: &[u8],
-    frame_counter: u64,
-) -> Result<Vec<u8>> {
-    let unbound_key = UnboundKey::new(&AES_256_GCM, key)
-        .map_err(|e| anyhow::anyhow!("Invalid key: {}", e))?;
-    let key = LessSafeKey::new(unbound_key);
-
-    // Use frame counter as nonce (monotonically increasing = unique)
-    let mut nonce_bytes = [0u8; 12];
-    nonce_bytes[4..12].copy_from_slice(&frame_counter.to_be_bytes());
-    let nonce = Nonce::assume_unique_for_key(nonce_bytes);
-
-    let mut in_out = frame.to_vec();
-    key.seal_in_place_append_tag(nonce, aead::Aad::empty(), &mut in_out)
-        .map_err(|e| anyhow::anyhow!("Voice frame encryption failed: {}", e))?;
-
-    Ok(in_out)
-}
-
-/// Decrypt a single Opus voice frame.
-pub fn decrypt_voice_frame(
-    key: &[u8; 32],
-    encrypted_frame: &[u8],
-    frame_counter: u64,
-) -> Result<Vec<u8>> {
-    let unbound_key = UnboundKey::new(&AES_256_GCM, key)
-        .map_err(|e| anyhow::anyhow!("Invalid key: {}", e))?;
-    let key = LessSafeKey::new(unbound_key);
-
-    let mut nonce_bytes = [0u8; 12];
-    nonce_bytes[4..12].copy_from_slice(&frame_counter.to_be_bytes());
-    let nonce = Nonce::assume_unique_for_key(nonce_bytes);
-
-    let mut in_out = encrypted_frame.to_vec();
-    let plaintext = key
-        .open_in_place(nonce, aead::Aad::empty(), &mut in_out)
-        .map_err(|_| anyhow::anyhow!("Voice frame decryption failed"))?;
-
-    Ok(plaintext.to_vec())
-}
 
 // ─── Key Derivation ─────────────────────────────────────────────────────────
 
@@ -194,16 +146,6 @@ mod tests {
         assert_eq!(decrypted, plaintext);
     }
 
-    #[test]
-    fn test_voice_frame_roundtrip() {
-        let key = [7u8; 32];
-        let frame = vec![0xDE, 0xAD, 0xBE, 0xEF]; // Fake Opus frame
-
-        let encrypted = encrypt_voice_frame(&key, &frame, 1).unwrap();
-        let decrypted = decrypt_voice_frame(&key, &encrypted, 1).unwrap();
-
-        assert_eq!(decrypted, frame);
-    }
 
     #[test]
     fn test_wrong_key_fails() {

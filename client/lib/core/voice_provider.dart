@@ -116,20 +116,11 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   /// Single peer connection to the SFU (Server).
   RTCPeerConnection? _serverConnection;
 
-  /// Remote audio streams for playback, keyed by track ID.
+  /// Remote audio streams for playback, keyed by stream ID.
   final Map<String, MediaStream> _remoteStreams = {};
 
   /// Audio renderers for remote streams (required on desktop for playback).
   final Map<String, RTCVideoRenderer> _audioRenderers = {};
-
-  /// Timer for debounced renegotiation.
-  Timer? _renegotiateTimer;
-
-  /// Whether a renegotiation is already in progress.
-  bool _renegotiating = false;
-
-  /// Stream IDs currently being set up (prevents async race duplicates).
-  final Set<String> _pendingStreamSetups = {};
 
   static const String serverId = '00000000-0000-0000-0000-000000000000';
 
@@ -183,17 +174,22 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       return; // ignore signals for other channels
     }
 
-    // Only handle signals from the server (serverId or nil)
+    // Only handle signals from the server (serverId or nil UUID)
     if (fromUserId != serverId &&
         fromUserId != '00000000-0000-0000-0000-000000000000') {
       return;
     }
 
-    debugPrint('WebRTC SFU signal from server: $signalType');
+    debugPrint('[Voice] Signal from server: $signalType');
 
     switch (signalType) {
       case 'answer':
+        // Server responding to our initial offer
         await _handleAnswer(payload);
+        break;
+      case 'offer':
+        // Server-initiated renegotiation (new user joined, track added)
+        await _handleServerOffer(payload);
         break;
       case 'ice':
         await _handleIceCandidate(payload);
@@ -201,32 +197,85 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
   }
 
+  /// Handle an answer from the server (response to our initial offer).
   Future<void> _handleAnswer(dynamic payload) async {
     if (_serverConnection == null) return;
 
-    // Guard: only set remote answer when we have a pending offer
     final signalingState = _serverConnection!.signalingState;
     debugPrint('[Voice] handleAnswer: signaling=$signalingState');
     if (signalingState != RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
       debugPrint(
-          '[Voice] Ignoring answer — PC is in $signalingState, not have-local-offer');
+          '[Voice] Ignoring answer — state is $signalingState, not have-local-offer');
       return;
     }
 
-    // Server payload is just the SDP string in our current implementation
     final String sdp = payload is String ? payload : payload['sdp'];
     debugPrint('[Voice] Answer SDP length: ${sdp.length}');
 
-    // Diagnostic: log all m= lines so we can see what tracks are in the answer
-    final mLines = sdp.split('\n').where((l) => l.startsWith('m=')).toList();
-    debugPrint('[Voice] Answer m= lines (${mLines.length}): $mLines');
     try {
       await _serverConnection!
           .setRemoteDescription(RTCSessionDescription(sdp, 'answer'));
-      debugPrint('[Voice] Remote description (answer) set OK — '
-          'expecting onTrack/onAddStream callbacks');
+      debugPrint('[Voice] Remote description (answer) set OK');
     } catch (e) {
-      debugPrint('[Voice] setRemoteDescription error: $e');
+      debugPrint('[Voice] setRemoteDescription (answer) error: $e');
+    }
+  }
+
+  /// Handle a server-initiated offer (renegotiation — new tracks added).
+  /// The server created a new offer because another user joined and their
+  /// track was added to our peer connection. We need to set the remote
+  /// description and send back an answer.
+  Future<void> _handleServerOffer(dynamic payload) async {
+    if (_serverConnection == null) {
+      debugPrint('[Voice] Ignoring server offer — no peer connection');
+      return;
+    }
+
+    final String sdp = payload is String ? payload : payload['sdp'];
+    debugPrint('[Voice] Server renegotiation offer (${sdp.length} bytes)');
+
+    try {
+      await _serverConnection!
+          .setRemoteDescription(RTCSessionDescription(sdp, 'offer'));
+
+      final answer = await _serverConnection!.createAnswer();
+      await _serverConnection!.setLocalDescription(answer);
+
+      // Wait for ICE gathering to complete
+      final completer = Completer<void>();
+      _serverConnection!.onIceGatheringState =
+          (RTCIceGatheringState gatheringState) {
+        if (gatheringState ==
+                RTCIceGatheringState.RTCIceGatheringStateComplete &&
+            !completer.isCompleted) {
+          completer.complete();
+        }
+      };
+
+      await completer.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () {
+          debugPrint('[Voice] ICE gathering timed out for renegotiation answer');
+        },
+      );
+
+      if (_serverConnection == null || state.currentChannelId == null) {
+        debugPrint('[Voice] Connection closed during renegotiation, aborting');
+        return;
+      }
+
+      final updatedDesc = await _serverConnection!.getLocalDescription();
+      final sdpToSend = updatedDesc?.sdp ?? answer.sdp!;
+
+      debugPrint('[Voice] Sending renegotiation answer (${sdpToSend.length} bytes)');
+      _sendSignal(
+        toUserId: serverId,
+        channelId: state.currentChannelId!,
+        signalType: 'answer',
+        payload: sdpToSend,
+      );
+    } catch (e) {
+      debugPrint('[Voice] Server offer handling error: $e');
     }
   }
 
@@ -259,9 +308,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
           'kind=${event.track.kind}, streams=${event.streams.length}, '
           'enabled=${event.track.enabled}');
 
-      // The SFU only forwards audio, but webrtc-rs may report the track
-      // as 'video' due to how replace_track handles transceiver types.
-      // Accept all tracks — enable for playback.
+      // Enable the track for playback (unless deafened)
       event.track.enabled = !state.deafened;
 
       if (event.streams.isNotEmpty) {
@@ -271,13 +318,10 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     };
 
     // onAddStream is critical for audio playback on desktop platforms.
-    // Some flutter_webrtc backends (especially Windows) only activate
-    // audio output when a stream is attached via this callback.
     // ignore: deprecated_member_use
     pc.onAddStream = (MediaStream stream) {
       debugPrint('[Voice] onAddStream: streamId=${stream.id}, '
-          'audioTracks=${stream.getAudioTracks().length}, '
-          'videoTracks=${stream.getVideoTracks().length}');
+          'audioTracks=${stream.getAudioTracks().length}');
       _setupRemoteStream(stream);
     };
 
@@ -322,14 +366,11 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   Future<void> _setupRemoteStream(MediaStream stream) async {
     final streamId = stream.id;
 
-    // Only set up one renderer per STREAM (not per track)
-    if (_audioRenderers.containsKey(streamId) ||
-        _pendingStreamSetups.contains(streamId)) {
-      debugPrint(
-          '[Voice] Stream $streamId already has/pending a renderer, skipping');
+    // Deduplicate — only one renderer per stream
+    if (_audioRenderers.containsKey(streamId)) {
+      debugPrint('[Voice] Stream $streamId already has a renderer, skipping');
       return;
     }
-    _pendingStreamSetups.add(streamId);
 
     _remoteStreams[streamId] = stream;
 
@@ -351,8 +392,6 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
           '(audioTracks=${stream.getAudioTracks().length})');
     } catch (e) {
       debugPrint('[Voice] Renderer setup error for stream $streamId: $e');
-    } finally {
-      _pendingStreamSetups.remove(streamId);
     }
   }
 
@@ -370,6 +409,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
   }
 
+  /// Initiate the SFU call: add local audio tracks, create offer, send to server.
   Future<void> _initiateSfuCall(String channelId) async {
     final pc = await _getOrCreateServerConnection();
 
@@ -380,45 +420,37 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       }
     }
 
-    // The SFU adds other users' tracks via add_track on its side,
-    // creating new m= sections in the answer SDP automatically.
-    // No need to pre-allocate recvonly transceivers on the client.
-
-    // Create the offer (local audio only — SFU adds remote tracks in the answer)
+    // Create offer and send to server
     final offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    // Wait for ICE gathering to complete so the SDP contains all candidates.
-    // This avoids sending an incomplete offer to the SFU.
+    // Wait for ICE gathering to complete
     final completer = Completer<void>();
     pc.onIceGatheringState = (RTCIceGatheringState gatheringState) {
-      debugPrint('ICE gathering state: $gatheringState');
-      if (gatheringState == RTCIceGatheringState.RTCIceGatheringStateComplete &&
+      if (gatheringState ==
+              RTCIceGatheringState.RTCIceGatheringStateComplete &&
           !completer.isCompleted) {
         completer.complete();
       }
     };
 
-    // Timeout after 3 seconds in case gathering never completes
     await completer.future.timeout(
       const Duration(seconds: 3),
       onTimeout: () {
-        debugPrint(
-            'ICE gathering timed out, sending offer with available candidates');
+        debugPrint('[Voice] ICE gathering timed out, sending with available candidates');
       },
     );
 
-    // Guard: peer connection may have been cleaned up during ICE gathering
+    // Guard: PC may have been cleaned up during ICE gathering
     if (_serverConnection == null) {
-      debugPrint('Peer connection was closed during ICE gathering, aborting');
+      debugPrint('[Voice] PC was closed during ICE gathering, aborting');
       return;
     }
 
-    // Use the updated local description which now includes ICE candidates
     final updatedDesc = await pc.getLocalDescription();
     final sdpToSend = updatedDesc?.sdp ?? offer.sdp!;
 
-    debugPrint('Sending SFU offer (${sdpToSend.length} bytes)');
+    debugPrint('[Voice] Sending SFU offer (${sdpToSend.length} bytes)');
     _sendSignal(
       toUserId: serverId,
       channelId: channelId,
@@ -433,8 +465,6 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     required String signalType,
     required dynamic payload,
   }) {
-    // Only send on the primary socket — the SFU lives on this server.
-    // Sending on multiple sockets would cause duplicate offers and corrupt SFU state.
     _primarySocket.sendWebRTCSignal(
       toUserId: toUserId,
       channelId: channelId,
@@ -452,7 +482,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     _serverConnection = null;
     _remoteStreams.clear();
 
-    // Dispose audio renderers — copy to list first to avoid concurrent modification
+    // Dispose audio renderers
     final renderers = _audioRenderers.values.toList();
     _audioRenderers.clear();
     for (final renderer in renderers) {
@@ -487,9 +517,6 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     final newParticipants =
         Map<String, List<VoiceParticipant>>.from(state.participants);
 
-    // Merge logic: only add if we don't already have a more recent state for this user
-    // Actually, since this is initial sync, we can just replace what's there
-    // UNLESS we are actively in this channel, in which case we might have more up to date WebSocket state.
     if (state.currentChannelId == channelId &&
         newParticipants[channelId] != null) {
       final mergedList =
@@ -523,9 +550,9 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     try {
       _localStream =
           await navigator.mediaDevices.getUserMedia(mediaConstraints);
-      debugPrint('Local audio stream started: ${_localStream!.id}');
+      debugPrint('[Voice] Local audio stream started: ${_localStream!.id}');
     } catch (e) {
-      debugPrint('Failed to get microphone: $e');
+      debugPrint('[Voice] Failed to get microphone: $e');
     }
   }
 
@@ -594,84 +621,8 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       );
     } else {
       state = state.copyWith(participants: newParticipants);
-
-      // When another user joins our current voice channel, renegotiate
-      // so the SFU can include their audio track in the new answer.
-      if (joined &&
-          !isCurrentUser &&
-          channelId == state.currentChannelId &&
-          _serverConnection != null) {
-        _scheduleRenegotiate();
-      }
-    }
-  }
-
-  /// Schedule a renegotiation with a short delay to batch rapid join events.
-  void _scheduleRenegotiate() {
-    _renegotiateTimer?.cancel();
-    _renegotiateTimer = Timer(const Duration(seconds: 5), () {
-      _renegotiate();
-    });
-  }
-
-  /// Renegotiate with the SFU to pick up new tracks.
-  /// Does a full reconnect — the server preserves our track identity
-  /// so other users' subscriptions remain valid.
-  Future<void> _renegotiate() async {
-    final channelId = state.currentChannelId;
-    if (channelId == null || _renegotiating) return;
-
-    // Don't renegotiate if we're still waiting for an answer to our current offer.
-    // The initial connection needs to complete first.
-    if (_serverConnection != null) {
-      final sigState = _serverConnection!.signalingState;
-      if (sigState == RTCSignalingState.RTCSignalingStateHaveLocalOffer) {
-        debugPrint(
-            'Deferring renegotiation — still waiting for answer (state: $sigState)');
-        _scheduleRenegotiate(); // Retry later
-        return;
-      }
-    }
-
-    _renegotiating = true;
-    state = state.copyWith(isConnecting: true);
-
-    debugPrint('[Voice] Renegotiating with SFU for channel $channelId');
-    try {
-      // Only close the peer connection and renderers — preserve the local
-      // audio stream so we don't lose mic access or trigger re-prompts.
-      try {
-        await _serverConnection?.close();
-      } catch (e) {
-        debugPrint('[Voice] PC close warning (safe to ignore): $e');
-      }
-      _serverConnection = null;
-
-      debugPrint('[Voice] Cleaning up ${_remoteStreams.length} streams, '
-          '${_audioRenderers.length} renderers');
-      _remoteStreams.clear();
-
-      final renderers = _audioRenderers.values.toList();
-      _audioRenderers.clear();
-      for (final renderer in renderers) {
-        try {
-          renderer.srcObject = null;
-          await renderer.dispose();
-        } catch (e) {
-          debugPrint('[Voice] Renderer dispose warning (safe to ignore): $e');
-        }
-      }
-
-      // Re-capture mic only if we don't have a local stream
-      if (_localStream == null) {
-        await _startLocalAudio();
-      }
-
-      await _initiateSfuCall(channelId);
-    } catch (e) {
-      debugPrint('Renegotiation failed: $e');
-    } finally {
-      _renegotiating = false;
+      // No client-side renegotiation needed — the SERVER will send us a
+      // new offer with the new user's track when they join.
     }
   }
 
@@ -692,8 +643,10 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
 
     try {
+      // 1. Start local audio
       await _startLocalAudio();
 
+      // 2. Join via API
       final currentMuted = state.muted;
       final currentDeafened = state.deafened;
       final data = await _api.joinVoiceChannel(
@@ -708,8 +661,6 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       final newParticipants =
           Map<String, List<VoiceParticipant>>.from(state.participants);
 
-      // Merge API participants with existing ones from WebSocket updates
-      // that might have arrived while the API request was pending.
       final mergedList =
           List<VoiceParticipant>.from(newParticipants[channelId] ?? []);
       for (final p in participants) {
@@ -726,10 +677,12 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
         participants: newParticipants,
       );
 
-      // In SFU mode, we only initiate ONE call to the server
+      // 3. Create peer connection and send offer to SFU
+      //    The server will respond with an answer containing existing tracks.
+      //    When new users join later, the server will send us new offers.
       await _initiateSfuCall(channelId);
     } catch (e) {
-      debugPrint('Failed to join voice channel: $e');
+      debugPrint('[Voice] Failed to join voice channel: $e');
       await _cleanupWebRTC();
     }
   }
@@ -741,7 +694,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     try {
       await _api.leaveVoiceChannel(channelId);
     } catch (e) {
-      debugPrint('Failed to leave voice channel: $e');
+      debugPrint('[Voice] Failed to leave voice channel: $e');
     }
 
     await _cleanupWebRTC();
@@ -767,7 +720,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     } catch (e) {
       state = state.copyWith(muted: !newMuted);
       _muteLocalAudio(!newMuted);
-      debugPrint('Failed to update mute: $e');
+      debugPrint('[Voice] Failed to update mute: $e');
     }
   }
 
@@ -792,7 +745,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       state = state.copyWith(deafened: oldDeafened, muted: oldMuted);
       _muteLocalAudio(oldMuted);
       _muteRemoteStreams(oldDeafened);
-      debugPrint('Failed to update deafen: $e');
+      debugPrint('[Voice] Failed to update deafen: $e');
     }
   }
 }
