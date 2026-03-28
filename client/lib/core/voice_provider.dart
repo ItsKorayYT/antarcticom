@@ -149,15 +149,15 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   }
 
   String _mungeSdp(String sdp) {
-    // Force Opus to use stereo and maximum bitrate for highest quality
+    // Force Opus to use stereo and maximum bitrate for flawless audio
     var munged = sdp.replaceAll(
       'useinbandfec=1',
-      'useinbandfec=1; stereo=1; sprop-stereo=1; maxaveragebitrate=510000',
+      'useinbandfec=1; stereo=1; sprop-stereo=1; maxaveragebitrate=510000; maxplaybackrate=48000; sprop-maxcapturerate=48000; cbr=1; usedtx=0',
     );
     if (!munged.contains('maxaveragebitrate')) {
       munged = munged.replaceAll(
         'minptime=10',
-        'minptime=10; stereo=1; sprop-stereo=1; maxaveragebitrate=510000; useinbandfec=1',
+        'minptime=10; stereo=1; sprop-stereo=1; maxaveragebitrate=510000; maxplaybackrate=48000; sprop-maxcapturerate=48000; cbr=1; usedtx=0; useinbandfec=1',
       );
     }
     return munged;
@@ -509,13 +509,21 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     final settings = _ref.read(settingsProvider);
     final mediaConstraints = {
       'audio': {
-        'echoCancellation': settings.enableEchoCancellation,
-        'noiseSuppression': settings.enableNoiseSuppression,
-        'autoGainControl': true,
+        // HARD disable all WebRTC audio processing to achieve raw pristine mic quality
+        'echoCancellation': false, 
+        'noiseSuppression': false,
+        'autoGainControl': false, 
         'sampleRate': 48000,
         'channelCount': 2,
         'highpassFilter': false,
         'typingNoiseDetection': false,
+        'googEchoCancellation': false,
+        'googAutoGainControl': false,
+        'googNoiseSuppression': false,
+        'googHighpassFilter': false,
+        'googTypingNoiseDetection': false,
+        'googAudioMirroring': false,
+        'googDucking': false,
         if (settings.selectedInputDeviceId != null)
           'deviceId': {'exact': settings.selectedInputDeviceId},
       },
