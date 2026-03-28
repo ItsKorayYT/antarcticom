@@ -11,6 +11,7 @@ use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp_transceiver::RTCPFeedback;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use webrtc::track::track_local::TrackLocalWriter;
 use webrtc::track::track_remote::TrackRemote;
@@ -153,7 +154,7 @@ impl SfuServer {
         let user_id_c = user_id;
 
         pc.on_track(Box::new(
-            move |track: Arc<TrackRemote>, _receiver, _transceiver| {
+            move |track: Arc<TrackRemote>, receiver, _transceiver| {
                 let published_track_inner = published_track_c.clone();
 
                 Box::pin(async move {
@@ -178,12 +179,24 @@ impl SfuServer {
 
                     // Always create a new local track with explicit audio/opus capability.
                     // This avoids the webrtc-rs bug where it puts opus into m=video sections.
+                    //
+                    // Maximum fidelity: stereo 510kbps CBR with FEC and RTCP feedback.
+                    // Clean, crispy audio — no downscaling.
                     let audio_capability = RTCRtpCodecCapability {
                         mime_type: "audio/opus".to_string(),
                         clock_rate: 48000,
                         channels: 2,
-                        sdp_fmtp_line: "minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=510000;maxplaybackrate=48000;sprop-maxcapturerate=48000;cbr=1;usedtx=0".to_string(),
-                        rtcp_feedback: vec![],
+                        sdp_fmtp_line: "minptime=10;useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=510000;maxplaybackrate=48000;sprop-maxcapturerate=48000;cbr=1;usedtx=0;ptime=10".to_string(),
+                        rtcp_feedback: vec![
+                            RTCPFeedback {
+                                typ: "transport-cc".to_string(),
+                                parameter: "".to_string(),
+                            },
+                            RTCPFeedback {
+                                typ: "nack".to_string(),
+                                parameter: "".to_string(),
+                            },
+                        ],
                     };
                     let local_track = Arc::new(TrackLocalStaticRTP::new(
                         audio_capability,
@@ -198,6 +211,25 @@ impl SfuServer {
                     }
 
                     tracing::info!("Published track created for user {}", user_id_c);
+
+                    // Spawn an RTCP reader to process receiver reports and NACK.
+                    // Without this, the WebRTC stack cannot do packet loss recovery.
+                    // Note: read_rtcp() is on RTCRtpReceiver, not TrackRemote.
+                    let user_id_rtcp = user_id_c;
+                    tokio::spawn(async move {
+                        loop {
+                            match receiver.read_rtcp().await {
+                                Ok(_) => {
+                                    // RTCP packets are handled internally by the interceptors;
+                                    // we just need to keep reading to drive the process.
+                                }
+                                Err(e) => {
+                                    tracing::debug!("RTCP read ended for user {} ({})", user_id_rtcp, e);
+                                    break;
+                                }
+                            }
+                        }
+                    });
 
                     // Forward RTP packets from the remote track to the local track.
                     // This loop runs until the PC is closed.

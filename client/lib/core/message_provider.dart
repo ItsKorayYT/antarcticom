@@ -108,13 +108,18 @@ class MessagesNotifier extends StateNotifier<MessagesState> {
     state = const MessagesState(isLoading: true);
     try {
       final data = await _api.getMessages(channelId);
+      // Guard: if user navigated away while the request was in-flight, discard
+      if (_currentChannelId != channelId) return;
       final messages = data
           .map((e) => MessageInfo.fromJson(e as Map<String, dynamic>))
           .toList();
       // API returns newest first — reverse for display (oldest at top)
       state = MessagesState(messages: messages.reversed.toList());
     } catch (_) {
-      state = const MessagesState(error: 'Failed to load messages');
+      // Only show error if we're still on the same channel
+      if (_currentChannelId == channelId) {
+        state = const MessagesState(error: 'Failed to load messages');
+      }
     }
   }
 

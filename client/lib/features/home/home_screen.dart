@@ -523,38 +523,72 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   context, selectedServerId, ch.id, ch.name),
             ),
             // Show participants when channel has users
-            ...participants.map((p) => Padding(
+            ...participants.map((p) {
+              final isSpeaking = voiceState.isSpeaking(p.userId);
+              return Padding(
                   padding: const EdgeInsets.only(left: 28.0, top: 1, bottom: 1),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.person,
-                        size: 14,
-                        color: theme.textMuted,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          p.displayName ?? p.userId.substring(0, 8),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: theme.textSecondary,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(4),
+                      color: isSpeaking
+                          ? theme.voiceSpeaking.withValues(alpha: 0.1)
+                          : Colors.transparent,
+                    ),
+                    child: Row(
+                      children: [
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isSpeaking
+                                  ? theme.voiceSpeaking
+                                  : Colors.transparent,
+                              width: 1.5,
+                            ),
                           ),
-                          overflow: TextOverflow.ellipsis,
+                          child: Icon(
+                            Icons.person,
+                            size: 12,
+                            color: isSpeaking
+                                ? theme.voiceSpeaking
+                                : theme.textMuted,
+                          ),
                         ),
-                      ),
-                      if (p.muted)
-                        const Icon(Icons.mic_off,
-                            size: 12, color: Colors.redAccent),
-                      if (p.deafened)
-                        const Padding(
-                          padding: EdgeInsets.only(left: 2),
-                          child: Icon(Icons.headset_off,
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            p.displayName ?? p.userId.substring(0, 8),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isSpeaking
+                                  ? theme.voiceSpeaking
+                                  : theme.textSecondary,
+                              fontWeight: isSpeaking
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (p.muted)
+                          const Icon(Icons.mic_off,
                               size: 12, color: Colors.redAccent),
-                        ),
-                    ],
+                        if (p.deafened)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 2),
+                            child: Icon(Icons.headset_off,
+                                size: 12, color: Colors.redAccent),
+                          ),
+                      ],
+                    ),
                   ),
-                )),
+                );
+            }),
           ];
         }),
       ],

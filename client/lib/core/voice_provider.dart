@@ -57,6 +57,9 @@ class VoiceState {
   /// Current user's deafen state.
   final bool deafened;
 
+  /// Set of user IDs currently speaking (audio level above threshold).
+  final Set<String> speakingUserIds;
+
   /// All voice participants across channels: channel_id → list of participants.
   final Map<String, List<VoiceParticipant>> participants;
 
@@ -65,6 +68,7 @@ class VoiceState {
     this.isConnecting = false,
     this.muted = false,
     this.deafened = false,
+    this.speakingUserIds = const {},
     this.participants = const {},
   });
 
@@ -74,6 +78,7 @@ class VoiceState {
     bool? isConnecting,
     bool? muted,
     bool? deafened,
+    Set<String>? speakingUserIds,
     Map<String, List<VoiceParticipant>>? participants,
   }) {
     return VoiceState(
@@ -82,9 +87,13 @@ class VoiceState {
       isConnecting: isConnecting ?? this.isConnecting,
       muted: muted ?? this.muted,
       deafened: deafened ?? this.deafened,
+      speakingUserIds: speakingUserIds ?? this.speakingUserIds,
       participants: participants ?? this.participants,
     );
   }
+
+  /// Check if a specific user is currently speaking.
+  bool isSpeaking(String userId) => speakingUserIds.contains(userId);
 
   /// Get participants for a specific channel.
   List<VoiceParticipant> participantsFor(String channelId) =>
@@ -122,6 +131,16 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   /// Audio renderers for remote streams (required on desktop for playback).
   final Map<String, RTCVideoRenderer> _audioRenderers = {};
 
+  /// Map stream IDs to user IDs for speaking detection.
+  final Map<String, String> _streamToUserId = {};
+
+  /// Timer for polling audio levels to detect speaking.
+  Timer? _speakingTimer;
+
+  /// Audio level threshold to consider someone "speaking" (0.0 - 1.0).
+  /// Values below this are considered silence/background noise.
+  static const double _speakingThreshold = 0.01;
+
   static const String serverId = '00000000-0000-0000-0000-000000000000';
 
   VoiceNotifier(this._api, this._primarySocket, this._connMgr,
@@ -141,6 +160,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
   @override
   void dispose() {
+    _stopSpeakingDetection();
     _cleanupWebRTC();
     for (final sub in _subs) {
       sub.cancel();
@@ -149,17 +169,49 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   }
 
   String _mungeSdp(String sdp) {
-    // Force Opus to use stereo and maximum bitrate for flawless audio
-    var munged = sdp.replaceAll(
-      'useinbandfec=1',
-      'useinbandfec=1; stereo=1; sprop-stereo=1; maxaveragebitrate=510000; maxplaybackrate=48000; sprop-maxcapturerate=48000; cbr=1; usedtx=0',
-    );
-    if (!munged.contains('maxaveragebitrate')) {
-      munged = munged.replaceAll(
-        'minptime=10',
-        'minptime=10; stereo=1; sprop-stereo=1; maxaveragebitrate=510000; maxplaybackrate=48000; sprop-maxcapturerate=48000; cbr=1; usedtx=0; useinbandfec=1',
+    // Maximum fidelity: stereo 510kbps CBR, 48kHz, 10ms frames, FEC enabled.
+    // NOTE: SDP fmtp uses semicolons WITHOUT spaces as separators.
+    const voiceParams =
+        'useinbandfec=1;stereo=1;sprop-stereo=1;maxaveragebitrate=510000;'
+        'maxplaybackrate=48000;sprop-maxcapturerate=48000;cbr=1;usedtx=0;'
+        'ptime=10;minptime=10';
+
+    var munged = sdp;
+
+    // Replace existing fmtp opus line with our high-fidelity parameters
+    final fmtpRegex = RegExp(r'a=fmtp:(\d+) (.+)', multiLine: true);
+    munged = munged.replaceAllMapped(fmtpRegex, (match) {
+      final payloadType = match.group(1)!;
+      // Only modify Opus lines (check if the corresponding rtpmap is opus)
+      if (sdp.contains('a=rtpmap:$payloadType opus/')) {
+        return 'a=fmtp:$payloadType $voiceParams';
+      }
+      return match.group(0)!;
+    });
+
+    // Strip comfort noise (CN) codec — it inserts fake hiss during silence
+    // that degrades perceived quality. Remove the rtpmap, fmtp, and rtp lines.
+    final cnPayloadRegex = RegExp(r'a=rtpmap:(\d+) CN/', multiLine: true);
+    final cnPayloads = cnPayloadRegex.allMatches(munged)
+        .map((m) => m.group(1)!)
+        .toList();
+    for (final pt in cnPayloads) {
+      // Remove a=rtpmap:<pt> CN/...
+      munged = munged.replaceAll(RegExp('a=rtpmap:$pt CN/.*\r?\n'), '');
+      // Remove a=fmtp:<pt> ...
+      munged = munged.replaceAll(RegExp('a=fmtp:$pt .*\r?\n'), '');
+      // Remove <pt> from m= lines (e.g. m=audio 9 UDP/TLS/RTP/SAVPF 111 110 ...)
+      munged = munged.replaceAllMapped(
+        RegExp(r'(m=audio \S+ \S+)(.+)', multiLine: true),
+        (match) {
+          final header = match.group(1)!;
+          final payloads = match.group(2)!;
+          final cleaned = payloads.replaceAll(RegExp(' $pt\\b|\\b$pt '), ' ').trim();
+          return '$header $cleaned';
+        },
       );
     }
+
     return munged;
   }
 
@@ -345,9 +397,11 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       debugPrint('[Voice] ICE state: $iceState');
       if (iceState == RTCIceConnectionState.RTCIceConnectionStateConnected) {
         state = state.copyWith(isConnecting: false);
+        _startSpeakingDetection();
       } else if (iceState ==
           RTCIceConnectionState.RTCIceConnectionStateDisconnected) {
         state = state.copyWith(isConnecting: true);
+        _stopSpeakingDetection();
       }
     };
 
@@ -366,6 +420,13 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
 
     _remoteStreams[streamId] = stream;
+
+    // Extract user ID from stream ID (server names them 'stream-{userId}')
+    if (streamId.startsWith('stream-')) {
+      final userId = streamId.substring(7); // Remove 'stream-' prefix
+      _streamToUserId[streamId] = userId;
+      debugPrint('[Voice] Mapped stream $streamId to user $userId');
+    }
 
     // Enable all audio tracks
     for (final audioTrack in stream.getAudioTracks()) {
@@ -391,6 +452,7 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
   /// Tear down renderer and stream reference for a removed stream.
   void _teardownRemoteStream(String streamId) {
     _remoteStreams.remove(streamId);
+    _streamToUserId.remove(streamId);
     final renderer = _audioRenderers.remove(streamId);
     if (renderer != null) {
       try {
@@ -413,6 +475,10 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       }
     }
 
+    // Force the actual Opus encoder to use max bitrate via setParameters.
+    // SDP maxaveragebitrate is only a hint — this directly controls the encoder.
+    await _forceEncoderBitrate(pc);
+
     // Create offer and send to server
     final offer = await pc.createOffer();
     final mungedSdp = _mungeSdp(offer.sdp!);
@@ -428,6 +494,29 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
       signalType: 'offer',
       payload: modifiedOffer.sdp,
     );
+  }
+
+  /// Force the Opus encoder bitrate to 510kbps on all audio senders.
+  /// This bypasses SDP hints and directly configures the encoder,
+  /// guaranteeing the bitrate we want.
+  Future<void> _forceEncoderBitrate(RTCPeerConnection pc) async {
+    try {
+      final senders = await pc.getSenders();
+      for (final sender in senders) {
+        if (sender.track?.kind == 'audio') {
+          final params = sender.parameters;
+          if (params.encodings != null) {
+            for (final encoding in params.encodings!) {
+              encoding.maxBitrate = 510000;
+            }
+            await sender.setParameters(params);
+            debugPrint('[Voice] Forced encoder bitrate to 510kbps');
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[Voice] setParameters warning (non-fatal): $e');
+    }
   }
 
   void _sendSignal({
@@ -452,6 +541,8 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
     _serverConnection = null;
     _remoteStreams.clear();
+    _streamToUserId.clear();
+    _stopSpeakingDetection();
 
     // Dispose audio renderers
     final renderers = _audioRenderers.values.toList();
@@ -482,6 +573,100 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
     }
   }
 
+  // ─── Speaking Detection ───────────────────────────────────────────────
+
+  /// Start polling audio levels to detect who's speaking.
+  void _startSpeakingDetection() {
+    _stopSpeakingDetection(); // Cancel any existing timer
+    _speakingTimer = Timer.periodic(
+      const Duration(milliseconds: 100),
+      (_) => _pollAudioLevels(),
+    );
+    debugPrint('[Voice] Speaking detection started');
+  }
+
+  /// Stop the speaking detection polling.
+  void _stopSpeakingDetection() {
+    _speakingTimer?.cancel();
+    _speakingTimer = null;
+    if (state.speakingUserIds.isNotEmpty) {
+      state = state.copyWith(speakingUserIds: {});
+    }
+  }
+
+  /// Poll getStats() on the peer connection to read inbound audio levels.
+  Future<void> _pollAudioLevels() async {
+    if (_serverConnection == null) return;
+
+    try {
+      final stats = await _serverConnection!.getStats();
+      final newSpeaking = <String>{};
+
+      // Check local mic for current user speaking
+      if (_currentUserId != null && !state.muted && _localStream != null) {
+        for (final report in stats) {
+          final type = report.type;
+          // Look for outbound audio stats (media-source type has audioLevel)
+          if (type == 'media-source') {
+            final kind = report.values['kind'];
+            if (kind == 'audio') {
+              final audioLevel = report.values['audioLevel'];
+              if (audioLevel is num && audioLevel > _speakingThreshold) {
+                newSpeaking.add(_currentUserId);
+              }
+            }
+          }
+        }
+      }
+
+      // Check remote streams for other users speaking
+      for (final report in stats) {
+        final type = report.type;
+        // inbound-rtp stats contain audioLevel for received audio
+        if (type == 'inbound-rtp') {
+          final kind = report.values['kind'] ?? report.values['mediaType'];
+          if (kind == 'audio') {
+            final audioLevel = report.values['audioLevel'];
+            if (audioLevel is num && audioLevel > _speakingThreshold) {
+              // Try to match this to a user via trackIdentifier or stream
+              final trackId = report.values['trackIdentifier'] as String?;
+              if (trackId != null) {
+                // Find which stream this track belongs to
+                for (final entry in _remoteStreams.entries) {
+                  for (final track in entry.value.getAudioTracks()) {
+                    if (track.id == trackId) {
+                      final userId = _streamToUserId[entry.key];
+                      if (userId != null) {
+                        newSpeaking.add(userId);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Only update state if speaking set changed
+      if (!_setsEqual(newSpeaking, state.speakingUserIds)) {
+        state = state.copyWith(speakingUserIds: newSpeaking);
+      }
+    } catch (e) {
+      // Non-fatal — stats can occasionally fail
+      debugPrint('[Voice] Audio level poll error: $e');
+    }
+  }
+
+  /// Compare two sets for equality without creating a new object.
+  bool _setsEqual(Set<String> a, Set<String> b) {
+    if (a.length != b.length) return false;
+    for (final item in a) {
+      if (!b.contains(item)) return false;
+    }
+    return true;
+  }
+
   /// Sync initial participants for a channel (called when fetching server channels)
   void syncInitialParticipants(
       String channelId, List<VoiceParticipant> initialParticipants) {
@@ -507,19 +692,29 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
 
   Future<void> _startLocalAudio() async {
     final settings = _ref.read(settingsProvider);
+    final useEC = settings.enableEchoCancellation;
+    final useNS = settings.enableNoiseSuppression;
+    // AGC disabled — it degrades audio quality by constantly adjusting levels,
+    // making speech sound "pumpy" and processed. Better to let the user set
+    // their mic level once and leave it alone.
+    const useAGC = false;
+
+    debugPrint('[Voice] Audio processing: EC=$useEC, NS=$useNS, AGC=$useAGC');
+
     final mediaConstraints = {
       'audio': {
-        // HARD disable all WebRTC audio processing to achieve raw pristine mic quality
-        'echoCancellation': false, 
-        'noiseSuppression': false,
-        'autoGainControl': false, 
+        // Use the settings toggles for processing.
+        'echoCancellation': useEC,
+        'noiseSuppression': useNS,
+        'autoGainControl': useAGC,
         'sampleRate': 48000,
-        'channelCount': 2,
-        'highpassFilter': false,
-        'typingNoiseDetection': false,
-        'googEchoCancellation': false,
-        'googAutoGainControl': false,
-        'googNoiseSuppression': false,
+        'channelCount': 2, // Stereo — full bandwidth audio
+        'highpassFilter': false, // Preserve full frequency range
+        'typingNoiseDetection': false, // Don't cut audio on keyboard typing
+        // Chrome/libwebrtc-specific constraints
+        'googEchoCancellation': useEC,
+        'googAutoGainControl': useAGC,
+        'googNoiseSuppression': useNS,
         'googHighpassFilter': false,
         'googTypingNoiseDetection': false,
         'googAudioMirroring': false,

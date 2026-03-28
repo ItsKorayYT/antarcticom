@@ -28,11 +28,14 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
   bool _isSending = false;
+  bool _needsScrollToBottom = false;
+  int _previousMessageCount = 0;
 
   @override
   void initState() {
     super.initState();
     // Fetch messages when entering channel
+    _needsScrollToBottom = true;
     Future.microtask(() {
       ref.read(messagesProvider.notifier).fetchMessages(widget.channelId);
     });
@@ -42,6 +45,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
   void didUpdateWidget(covariant ChannelScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.channelId != widget.channelId) {
+      _needsScrollToBottom = true;
       ref.read(messagesProvider.notifier).fetchMessages(widget.channelId);
     }
   }
@@ -53,9 +57,50 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
     super.dispose();
   }
 
+  /// Scroll the message list to the very bottom (newest messages).
+  void _scrollToBottom({bool animate = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_scrollController.hasClients) {
+        if (animate) {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        } else {
+          _scrollController.jumpTo(
+            _scrollController.position.maxScrollExtent,
+          );
+        }
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final msgState = ref.watch(messagesProvider);
+
+    // When messages finish loading, scroll to the bottom
+    if (_needsScrollToBottom && !msgState.isLoading && msgState.messages.isNotEmpty) {
+      _needsScrollToBottom = false;
+      _scrollToBottom();
+    }
+
+    // Auto-scroll on new incoming messages if user is near the bottom
+    if (!msgState.isLoading &&
+        msgState.messages.length > _previousMessageCount &&
+        _previousMessageCount > 0) {
+      final isNearBottom = _scrollController.hasClients &&
+          (_scrollController.position.maxScrollExtent -
+                  _scrollController.position.pixels) <
+              150;
+      if (isNearBottom) {
+        _scrollToBottom(animate: true);
+      }
+    }
+    _previousMessageCount = msgState.messages.length;
+
     final auth = ref.watch(authProvider);
     final theme = ref.watch(themeProvider);
     final channelsState = ref.watch(channelsProvider);
@@ -273,16 +318,7 @@ class _ChannelScreenState extends ConsumerState<ChannelScreen> {
     if (mounted) {
       setState(() => _isSending = false);
       if (success) {
-        // Scroll to bottom
-        Future.delayed(const Duration(milliseconds: 100), () {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            );
-          }
-        });
+        _scrollToBottom(animate: true);
       }
     }
   }
