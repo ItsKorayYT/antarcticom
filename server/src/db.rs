@@ -40,10 +40,11 @@ pub mod users {
     }
 
     pub async fn find_by_username(pool: &PgPool, username: &str) -> AppResult<Option<User>> {
-        let user = sqlx::query_as::<_, User>("SELECT * FROM users WHERE LOWER(username) = LOWER($1)")
-            .bind(username)
-            .fetch_optional(pool)
-            .await?;
+        let user =
+            sqlx::query_as::<_, User>("SELECT * FROM users WHERE LOWER(username) = LOWER($1)")
+                .bind(username)
+                .fetch_optional(pool)
+                .await?;
         Ok(user)
     }
 
@@ -176,16 +177,17 @@ pub mod servers {
 
     /// List all servers (used for auto-joining new users).
     pub async fn list_all(pool: &PgPool) -> AppResult<Vec<Server>> {
-        let servers = sqlx::query_as::<_, Server>(
-            "SELECT * FROM servers ORDER BY name",
-        )
-        .fetch_all(pool)
-        .await?;
+        let servers = sqlx::query_as::<_, Server>("SELECT * FROM servers ORDER BY name")
+            .fetch_all(pool)
+            .await?;
         Ok(servers)
     }
 
     /// List all members for a specific server (used for broadcasting events).
-    pub async fn list_members(pool: &PgPool, server_id: Uuid) -> AppResult<Vec<crate::models::Member>> {
+    pub async fn list_members(
+        pool: &PgPool,
+        server_id: Uuid,
+    ) -> AppResult<Vec<crate::models::Member>> {
         let members = sqlx::query_as::<_, crate::models::Member>(
             r#"
             SELECT * FROM members WHERE server_id = $1
@@ -300,7 +302,9 @@ pub mod messages {
         .await?;
 
         // Fetch author details
-        let author = super::users::find_by_id(pool, author_id).await?.map(|u| u.into());
+        let author = super::users::find_by_id(pool, author_id)
+            .await?
+            .map(|u| u.into());
         let mut message = message;
         message.author = author;
 
@@ -351,8 +355,8 @@ pub mod messages {
         let messages = rows
             .into_iter()
             .map(|row| {
-                use sqlx::Row;
                 use crate::models::UserPublic;
+                use sqlx::Row;
 
                 let msg = Message {
                     id: row.get("id"),
@@ -399,10 +403,11 @@ pub mod messages {
     }
 
     pub async fn delete(pool: &PgPool, id: i64) -> AppResult<bool> {
-        let result = sqlx::query("UPDATE messages SET is_deleted = TRUE, content = '' WHERE id = $1")
-            .bind(id)
-            .execute(pool)
-            .await?;
+        let result =
+            sqlx::query("UPDATE messages SET is_deleted = TRUE, content = '' WHERE id = $1")
+                .bind(id)
+                .execute(pool)
+                .await?;
         Ok(result.rows_affected() > 0)
     }
 }
@@ -418,11 +423,7 @@ pub mod members {
     use crate::error::AppResult;
     use crate::models::{Member, Permissions};
 
-    pub async fn add(
-        pool: &PgPool,
-        user_id: Uuid,
-        server_id: Uuid,
-    ) -> AppResult<Member> {
+    pub async fn add(pool: &PgPool, user_id: Uuid, server_id: Uuid) -> AppResult<Member> {
         // We initialize with empty roles list
         let member = sqlx::query_as::<_, Member>(
             r#"
@@ -440,12 +441,11 @@ pub mod members {
     }
 
     pub async fn remove(pool: &PgPool, user_id: Uuid, server_id: Uuid) -> AppResult<bool> {
-        let result =
-            sqlx::query("DELETE FROM members WHERE user_id = $1 AND server_id = $2")
-                .bind(user_id)
-                .bind(server_id)
-                .execute(pool)
-                .await?;
+        let result = sqlx::query("DELETE FROM members WHERE user_id = $1 AND server_id = $2")
+            .bind(user_id)
+            .bind(server_id)
+            .execute(pool)
+            .await?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -468,8 +468,8 @@ pub mod members {
         .await?;
 
         let member = rows.map(|row| {
-            use sqlx::Row;
             use crate::models::UserPublic;
+            use sqlx::Row;
 
             Member {
                 user_id: row.get("user_id"),
@@ -510,8 +510,8 @@ pub mod members {
         let members = rows
             .into_iter()
             .map(|row| {
-                use sqlx::Row;
                 use crate::models::UserPublic;
+                use sqlx::Row;
 
                 Member {
                     user_id: row.get("user_id"),
@@ -532,7 +532,12 @@ pub mod members {
         Ok(members)
     }
 
-    pub async fn add_role(pool: &PgPool, user_id: Uuid, server_id: Uuid, role_id: Uuid) -> AppResult<()> {
+    pub async fn add_role(
+        pool: &PgPool,
+        user_id: Uuid,
+        server_id: Uuid,
+        role_id: Uuid,
+    ) -> AppResult<()> {
         sqlx::query(
             "INSERT INTO member_roles (user_id, server_id, role_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
         )
@@ -544,7 +549,12 @@ pub mod members {
         Ok(())
     }
 
-    pub async fn remove_role(pool: &PgPool, user_id: Uuid, server_id: Uuid, role_id: Uuid) -> AppResult<()> {
+    pub async fn remove_role(
+        pool: &PgPool,
+        user_id: Uuid,
+        server_id: Uuid,
+        role_id: Uuid,
+    ) -> AppResult<()> {
         sqlx::query(
             "DELETE FROM member_roles WHERE user_id = $1 AND server_id = $2 AND role_id = $3",
         )
@@ -556,13 +566,18 @@ pub mod members {
         Ok(())
     }
 
-    pub async fn get_permissions(pool: &PgPool, user_id: Uuid, server_id: Uuid) -> AppResult<Permissions> {
+    pub async fn get_permissions(
+        pool: &PgPool,
+        user_id: Uuid,
+        server_id: Uuid,
+    ) -> AppResult<Permissions> {
         // 1. Check if owner
-        let server_owner = sqlx::query_scalar::<_, Uuid>("SELECT owner_id FROM servers WHERE id = $1")
-            .bind(server_id)
-            .fetch_optional(pool)
-            .await?;
-        
+        let server_owner =
+            sqlx::query_scalar::<_, Uuid>("SELECT owner_id FROM servers WHERE id = $1")
+                .bind(server_id)
+                .fetch_optional(pool)
+                .await?;
+
         if let Some(owner_id) = server_owner {
             if owner_id == user_id {
                 return Ok(Permissions::new(Permissions::ADMINISTRATOR));
@@ -701,13 +716,12 @@ pub mod bans {
     }
 
     pub async fn find(pool: &PgPool, server_id: Uuid, user_id: Uuid) -> AppResult<Option<Ban>> {
-        let ban = sqlx::query_as::<_, Ban>(
-            "SELECT * FROM bans WHERE server_id = $1 AND user_id = $2",
-        )
-        .bind(server_id)
-        .bind(user_id)
-        .fetch_optional(pool)
-        .await?;
+        let ban =
+            sqlx::query_as::<_, Ban>("SELECT * FROM bans WHERE server_id = $1 AND user_id = $2")
+                .bind(server_id)
+                .bind(user_id)
+                .fetch_optional(pool)
+                .await?;
         Ok(ban)
     }
 

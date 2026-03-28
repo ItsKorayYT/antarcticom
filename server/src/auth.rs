@@ -53,12 +53,15 @@ pub fn create_token(config: &AuthConfig, user_id: Uuid, username: &str) -> AppRe
     })?;
 
     let pem = std::fs::read(key_path).map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Failed to read private key '{}': {}", key_path, e))
+        AppError::Internal(anyhow::anyhow!(
+            "Failed to read private key '{}': {}",
+            key_path,
+            e
+        ))
     })?;
 
-    let encoding_key = EncodingKey::from_rsa_pem(&pem).map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Invalid RSA private key: {}", e))
-    })?;
+    let encoding_key = EncodingKey::from_rsa_pem(&pem)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Invalid RSA private key: {}", e)))?;
 
     let now = Utc::now().timestamp();
     let claims = Claims {
@@ -84,30 +87,28 @@ pub fn validate_token(config: &AuthConfig, token: &str) -> AppResult<Claims> {
         ))
     })?;
 
-    let decoding_key = DecodingKey::from_rsa_pem(&pem).map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Invalid RSA public key: {}", e))
-    })?;
+    let decoding_key = DecodingKey::from_rsa_pem(&pem)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Invalid RSA public key: {}", e)))?;
 
     let mut validation = Validation::new(Algorithm::RS256);
     validation.validate_exp = true;
 
-    let token_data = decode::<Claims>(token, &decoding_key, &validation)
-        .map_err(|_| AppError::Unauthorized)?;
+    let token_data =
+        decode::<Claims>(token, &decoding_key, &validation).map_err(|_| AppError::Unauthorized)?;
 
     Ok(token_data.claims)
 }
 
 /// Validate a token using a raw PEM public key (for Community mode with fetched key).
 pub fn validate_token_with_public_key(public_key_pem: &[u8], token: &str) -> AppResult<Claims> {
-    let decoding_key = DecodingKey::from_rsa_pem(public_key_pem).map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Invalid RSA public key: {}", e))
-    })?;
+    let decoding_key = DecodingKey::from_rsa_pem(public_key_pem)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Invalid RSA public key: {}", e)))?;
 
     let mut validation = Validation::new(Algorithm::RS256);
     validation.validate_exp = true;
 
-    let token_data = decode::<Claims>(token, &decoding_key, &validation)
-        .map_err(|_| AppError::Unauthorized)?;
+    let token_data =
+        decode::<Claims>(token, &decoding_key, &validation).map_err(|_| AppError::Unauthorized)?;
 
     Ok(token_data.claims)
 }
@@ -140,7 +141,11 @@ pub fn ensure_keypair(config: &AuthConfig) -> Result<()> {
 
     // If both files exist, nothing to do
     if Path::new(private_path).exists() && Path::new(public_path).exists() {
-        tracing::info!("RSA keypair found at '{}' and '{}'", private_path, public_path);
+        tracing::info!(
+            "RSA keypair found at '{}' and '{}'",
+            private_path,
+            public_path
+        );
         return Ok(());
     }
 

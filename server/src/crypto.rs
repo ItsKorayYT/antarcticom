@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use anyhow::Result;
 /// Crypto module — End-to-End Encryption engine.
 ///
 /// Implements:
@@ -11,11 +12,9 @@
 /// This module is designed to be compiled as a shared library
 /// and called from the Flutter client via FFI, as well as used
 /// server-side for key distribution.
-
-use ring::aead::{self, LessSafeKey, UnboundKey, AES_256_GCM, Nonce};
+use ring::aead::{self, LessSafeKey, Nonce, UnboundKey, AES_256_GCM};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::signature::{self, Ed25519KeyPair, KeyPair};
-use anyhow::Result;
 
 // ─── Key Types ──────────────────────────────────────────────────────────────
 
@@ -80,8 +79,8 @@ pub fn encrypt_aes256gcm(key: &[u8; 32], plaintext: &[u8]) -> Result<(Vec<u8>, [
     rng.fill(&mut nonce_bytes)
         .map_err(|e| anyhow::anyhow!("RNG failed: {}", e))?;
 
-    let unbound_key = UnboundKey::new(&AES_256_GCM, key)
-        .map_err(|e| anyhow::anyhow!("Invalid key: {}", e))?;
+    let unbound_key =
+        UnboundKey::new(&AES_256_GCM, key).map_err(|e| anyhow::anyhow!("Invalid key: {}", e))?;
     let key = LessSafeKey::new(unbound_key);
 
     let nonce = Nonce::assume_unique_for_key(nonce_bytes);
@@ -99,8 +98,8 @@ pub fn decrypt_aes256gcm(
     ciphertext: &[u8],
     nonce_bytes: &[u8; 12],
 ) -> Result<Vec<u8>> {
-    let unbound_key = UnboundKey::new(&AES_256_GCM, key)
-        .map_err(|e| anyhow::anyhow!("Invalid key: {}", e))?;
+    let unbound_key =
+        UnboundKey::new(&AES_256_GCM, key).map_err(|e| anyhow::anyhow!("Invalid key: {}", e))?;
     let key = LessSafeKey::new(unbound_key);
 
     let nonce = Nonce::assume_unique_for_key(*nonce_bytes);
@@ -112,7 +111,6 @@ pub fn decrypt_aes256gcm(
 
     Ok(plaintext.to_vec())
 }
-
 
 // ─── Key Derivation ─────────────────────────────────────────────────────────
 
@@ -145,7 +143,6 @@ mod tests {
 
         assert_eq!(decrypted, plaintext);
     }
-
 
     #[test]
     fn test_wrong_key_fails() {

@@ -8,7 +8,6 @@
 /// - Mention parsing (@user, @role, @channel)
 /// - Reaction management
 /// - Message search (via Meilisearch when available)
-
 use uuid::Uuid;
 
 use crate::error::{AppError, AppResult};

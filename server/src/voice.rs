@@ -1,19 +1,19 @@
 use anyhow::Result;
-use std::sync::Arc;
 use dashmap::DashMap;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
+use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::APIBuilder;
-use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::interceptor::registry::Registry;
-use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-use webrtc::track::track_local::TrackLocalWriter;
-use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
-use webrtc::track::track_remote::TrackRemote;
+use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
+use webrtc::track::track_local::TrackLocalWriter;
+use webrtc::track::track_remote::TrackRemote;
 
 /// Type alias for a function that sends a WebSocket message to a specific user.
 /// The SFU uses this to push server-initiated offers to clients.
@@ -55,6 +55,17 @@ impl SfuServer {
 
         let mut se = webrtc::api::setting_engine::SettingEngine::default();
 
+        // 1. Restrict ICE to UDP4 to avoid errors trying to bind to IPv6 interfaces (OS Error 22)
+        se.set_network_types(vec![webrtc::ice::network_type::NetworkType::Udp4]);
+
+        // 2. Lock ephemeral UDP ports to a specific range (50000-50050)
+        // This makes it easy to open the correct ports on a VPS firewall.
+        if let Ok(ephemeral) = webrtc::ice::udp_network::EphemeralUDP::new(50000, 50050) {
+            se.set_udp_network(webrtc::ice::udp_network::UDPNetwork::Ephemeral(ephemeral));
+        } else {
+            tracing::error!("Failed to create ephemeral UDP network");
+        }
+
         if let Some(ref ip) = public_ip {
             se.set_nat_1to1_ips(
                 vec![ip.clone()],
@@ -83,8 +94,6 @@ impl SfuServer {
         *ws = Some(sender);
     }
 
-
-
     /// Handle an offer from a client. Creates the peer connection, subscribes
     /// to existing tracks, creates an answer, and then renegotiates with all
     /// existing users so they receive this new user's track.
@@ -97,25 +106,28 @@ impl SfuServer {
         use webrtc::ice_transport::ice_server::RTCIceServer;
 
         let config = RTCConfiguration {
-            ice_servers: vec![
-                RTCIceServer {
-                    urls: vec![
-                        "stun:stun.l.google.com:19302".to_string(),
-                        "stun:stun1.l.google.com:19302".to_string(),
-                    ],
-                    ..Default::default()
-                },
-            ],
+            ice_servers: vec![RTCIceServer {
+                urls: vec![
+                    "stun:stun.l.google.com:19302".to_string(),
+                    "stun:stun1.l.google.com:19302".to_string(),
+                ],
+                ..Default::default()
+            }],
             ..Default::default()
         };
         let pc = Arc::new(self.api.new_peer_connection(config).await?);
 
-        let channel = self.channels.entry(channel_id).or_insert_with(|| {
-            Arc::new(SfuChannel {
-                channel_id,
-                users: Arc::new(DashMap::new()),
+        let channel = self
+            .channels
+            .entry(channel_id)
+            .or_insert_with(|| {
+                Arc::new(SfuChannel {
+                    channel_id,
+                    users: Arc::new(DashMap::new()),
+                })
             })
-        }).value().clone();
+            .value()
+            .clone();
 
         // If the user already has a connection (reconnect), close the old PC.
         if let Some(old_user) = channel.users.get(&user_id) {
@@ -140,70 +152,84 @@ impl SfuServer {
         let published_track_c = user.published_track.clone();
         let user_id_c = user_id;
 
-        pc.on_track(Box::new(move |track: Arc<TrackRemote>, _receiver, _transceiver| {
-            let published_track_inner = published_track_c.clone();
+        pc.on_track(Box::new(
+            move |track: Arc<TrackRemote>, _receiver, _transceiver| {
+                let published_track_inner = published_track_c.clone();
 
-            Box::pin(async move {
-                let track_id = track.id();
-                let codec = track.codec();
-                tracing::info!(
-                    "Received track {} from user {} (codec: {}, kind: {})",
-                    track_id, user_id_c, codec.capability.mime_type, track.kind()
-                );
+                Box::pin(async move {
+                    let track_id = track.id();
+                    let codec = track.codec();
+                    tracing::info!(
+                        "Received track {} from user {} (codec: {}, kind: {})",
+                        track_id,
+                        user_id_c,
+                        codec.capability.mime_type,
+                        track.kind()
+                    );
 
-                if track.kind() != webrtc::rtp_transceiver::rtp_codec::RTPCodecType::Audio {
-                    tracing::info!("Ignoring non-audio track {} from user {}", track_id, user_id_c);
-                    return;
-                }
+                    if track.kind() != webrtc::rtp_transceiver::rtp_codec::RTPCodecType::Audio {
+                        tracing::info!(
+                            "Ignoring non-audio track {} from user {}",
+                            track_id,
+                            user_id_c
+                        );
+                        return;
+                    }
 
-                // Always create a new local track with explicit audio/opus capability.
-                // This avoids the webrtc-rs bug where it puts opus into m=video sections.
-                let audio_capability = RTCRtpCodecCapability {
-                    mime_type: "audio/opus".to_string(),
-                    clock_rate: 48000,
-                    channels: 2,
-                    sdp_fmtp_line: "minptime=10;useinbandfec=1".to_string(),
-                    rtcp_feedback: vec![],
-                };
-                let local_track = Arc::new(TrackLocalStaticRTP::new(
-                    audio_capability,
-                    format!("audio-{}", user_id_c),
-                    format!("stream-{}", user_id_c),
-                ));
+                    // Always create a new local track with explicit audio/opus capability.
+                    // This avoids the webrtc-rs bug where it puts opus into m=video sections.
+                    let audio_capability = RTCRtpCodecCapability {
+                        mime_type: "audio/opus".to_string(),
+                        clock_rate: 48000,
+                        channels: 2,
+                        sdp_fmtp_line: "minptime=10;useinbandfec=1".to_string(),
+                        rtcp_feedback: vec![],
+                    };
+                    let local_track = Arc::new(TrackLocalStaticRTP::new(
+                        audio_capability,
+                        format!("audio-{}", user_id_c),
+                        format!("stream-{}", user_id_c),
+                    ));
 
-                // Store as our published track
-                {
-                    let mut write = published_track_inner.write().await;
-                    *write = Some(local_track.clone());
-                }
+                    // Store as our published track
+                    {
+                        let mut write = published_track_inner.write().await;
+                        *write = Some(local_track.clone());
+                    }
 
-                tracing::info!("Published track created for user {}", user_id_c);
+                    tracing::info!("Published track created for user {}", user_id_c);
 
-                // Forward RTP packets from the remote track to the local track.
-                // This loop runs until the PC is closed.
-                loop {
-                    match track.read_rtp().await {
-                        Ok((rtp_packet, _attributes)) => {
-                            if let Err(e) = local_track.write_rtp(&rtp_packet).await {
-                                // write_rtp can fail if no senders are subscribed yet — that's OK
-                                if e.to_string().contains("ErrRTPSenderSendAlreadyCalled") {
-                                    continue;
+                    // Forward RTP packets from the remote track to the local track.
+                    // This loop runs until the PC is closed.
+                    loop {
+                        match track.read_rtp().await {
+                            Ok((rtp_packet, _attributes)) => {
+                                if let Err(e) = local_track.write_rtp(&rtp_packet).await {
+                                    // write_rtp can fail if no senders are subscribed yet — that's OK
+                                    if e.to_string().contains("ErrRTPSenderSendAlreadyCalled") {
+                                        continue;
+                                    }
+                                    tracing::debug!(
+                                        "RTP write error for user {}: {}",
+                                        user_id_c,
+                                        e
+                                    );
+                                    break;
                                 }
-                                tracing::debug!("RTP write error for user {}: {}", user_id_c, e);
+                            }
+                            Err(e) => {
+                                tracing::info!("RTP read ended for user {} ({})", user_id_c, e);
                                 break;
                             }
                         }
-                        Err(e) => {
-                            tracing::info!("RTP read ended for user {} ({})", user_id_c, e);
-                            break;
-                        }
                     }
-                }
-            })
-        }));
+                })
+            },
+        ));
 
         // Step 1: Set remote description (the client's offer)
-        pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?).await?;
+        pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?)
+            .await?;
 
         // Step 2: Subscribe this new user to all existing users' tracks
         let mut subscribed_count = 0u32;
@@ -220,29 +246,42 @@ impl SfuServer {
                         subscribed_count += 1;
                         tracing::info!(
                             "Subscribed user {} to track from user {}",
-                            user_id, other_user.user_id
+                            user_id,
+                            other_user.user_id
                         );
                     }
                     Err(e) => {
                         tracing::error!(
                             "Error subscribing user {} to track from user {}: {}",
-                            user_id, other_user.user_id, e
+                            user_id,
+                            other_user.user_id,
+                            e
                         );
                     }
                 }
             }
         }
-        tracing::info!("User {} subscribed to {} existing tracks", user_id, subscribed_count);
+        tracing::info!(
+            "User {} subscribed to {} existing tracks",
+            user_id,
+            subscribed_count
+        );
 
         // Step 3: Create answer
         let answer = pc.create_answer(None).await?;
         pc.set_local_description(answer).await?;
 
         // Trickle ICE: Don't wait for gathering, send current local description immediately
-        let local_desc = pc.local_description().await
+        let local_desc = pc
+            .local_description()
+            .await
             .ok_or_else(|| anyhow::anyhow!("No local description available"))?;
 
-        tracing::info!("SFU answer ready for user {} ({} bytes)", user_id, local_desc.sdp.len());
+        tracing::info!(
+            "SFU answer ready for user {} ({} bytes)",
+            user_id,
+            local_desc.sdp.len()
+        );
 
         // Step 4: Schedule renegotiation for all OTHER existing users so they
         // receive this new user's track. We spawn this as a background task
@@ -264,7 +303,10 @@ impl SfuServer {
                 // Check if the channel/user still exists
                 if let Some(ch) = sfu_self.get(&channel_id) {
                     if !ch.users.contains_key(&user_id) {
-                        tracing::info!("User {} left before track was published, skipping renegotiation", user_id);
+                        tracing::info!(
+                            "User {} left before track was published, skipping renegotiation",
+                            user_id
+                        );
                         return;
                     }
                 } else {
@@ -272,7 +314,10 @@ impl SfuServer {
                 }
             };
 
-            tracing::info!("User {}'s track is ready, renegotiating with existing users", user_id);
+            tracing::info!(
+                "User {}'s track is ready, renegotiating with existing users",
+                user_id
+            );
 
             // Add this track to all other users' peer connections and renegotiate
             for other_entry in channel_c.users.iter() {
@@ -287,34 +332,30 @@ impl SfuServer {
                         other_user.senders.insert(user_id, sender);
                         tracing::info!(
                             "Added user {}'s track to user {}'s PC",
-                            user_id, other_user.user_id
+                            user_id,
+                            other_user.user_id
                         );
                     }
                     Err(e) => {
                         tracing::error!(
                             "Failed to add track to user {}'s PC: {}",
-                            other_user.user_id, e
+                            other_user.user_id,
+                            e
                         );
                         continue;
                     }
                 }
 
                 // Create a new offer from the other user's PC (server-initiated renegotiation)
-                match Self::create_and_send_offer(
-                    &other_user,
-                    channel_id,
-                    &ws_sender_ref,
-                ).await {
+                match Self::create_and_send_offer(&other_user, channel_id, &ws_sender_ref).await {
                     Ok(()) => {
-                        tracing::info!(
-                            "Sent renegotiation offer to user {}",
-                            other_user.user_id
-                        );
+                        tracing::info!("Sent renegotiation offer to user {}", other_user.user_id);
                     }
                     Err(e) => {
                         tracing::error!(
                             "Failed to renegotiate with user {}: {}",
-                            other_user.user_id, e
+                            other_user.user_id,
+                            e
                         );
                     }
                 }
@@ -335,7 +376,10 @@ impl SfuServer {
         user.peer_connection.set_local_description(offer).await?;
 
         // Trickle ICE: send immediately without waiting for gathering
-        let local_desc = user.peer_connection.local_description().await
+        let local_desc = user
+            .peer_connection
+            .local_description()
+            .await
             .ok_or_else(|| anyhow::anyhow!("No local description for renegotiation"))?;
 
         if let Some(ref sender) = ws_sender {
@@ -368,10 +412,13 @@ impl SfuServer {
                 let state = user.peer_connection.signaling_state();
                 tracing::info!(
                     "handle_answer for user {}: signaling_state={:?}",
-                    user_id, state
+                    user_id,
+                    state
                 );
 
-                if state == webrtc::peer_connection::signaling_state::RTCSignalingState::HaveLocalOffer {
+                if state
+                    == webrtc::peer_connection::signaling_state::RTCSignalingState::HaveLocalOffer
+                {
                     user.peer_connection
                         .set_remote_description(RTCSessionDescription::answer(answer_sdp)?)
                         .await?;
@@ -383,7 +430,11 @@ impl SfuServer {
                     );
                 }
             } else {
-                tracing::warn!("handle_answer: user {} not found in channel {}", user_id, channel_id);
+                tracing::warn!(
+                    "handle_answer: user {} not found in channel {}",
+                    user_id,
+                    channel_id
+                );
             }
         }
         Ok(())
@@ -398,32 +449,33 @@ impl SfuServer {
     ) -> Result<()> {
         if let Some(channel) = self.channels.get(&channel_id) {
             if let Some(user) = channel.users.get(&user_id) {
-                let candidate_str = candidate_json.get("candidate")
+                let candidate_str = candidate_json
+                    .get("candidate")
                     .and_then(|v| v.as_str())
                     .unwrap_or_default()
                     .to_string();
-                let sdp_mid = candidate_json.get("sdpMid")
+                let sdp_mid = candidate_json
+                    .get("sdpMid")
                     .and_then(|v| v.as_str())
                     .map(String::from);
-                let sdp_mline_index = candidate_json.get("sdpMLineIndex")
-                    .and_then(|v| {
-                        if let Some(num) = v.as_u64() {
-                            Some(num as u16)
-                        } else if let Some(s) = v.as_str() {
-                            s.parse::<u16>().ok()
-                        } else {
-                            None
-                        }
-                    });
+                let sdp_mline_index = candidate_json.get("sdpMLineIndex").and_then(|v| {
+                    if let Some(num) = v.as_u64() {
+                        Some(num as u16)
+                    } else if let Some(s) = v.as_str() {
+                        s.parse::<u16>().ok()
+                    } else {
+                        None
+                    }
+                });
 
-                user.peer_connection.add_ice_candidate(
-                    webrtc::ice_transport::ice_candidate::RTCIceCandidateInit {
+                user.peer_connection
+                    .add_ice_candidate(webrtc::ice_transport::ice_candidate::RTCIceCandidateInit {
                         candidate: candidate_str,
                         sdp_mid,
                         sdp_mline_index,
                         ..Default::default()
-                    },
-                ).await?;
+                    })
+                    .await?;
             }
         }
         Ok(())
@@ -441,7 +493,11 @@ impl SfuServer {
         let removed_user = channel.users.remove(&user_id);
         if let Some((_, user)) = removed_user {
             let _ = user.peer_connection.close().await;
-            tracing::info!("Closed PC for user {} leaving channel {}", user_id, channel_id);
+            tracing::info!(
+                "Closed PC for user {} leaving channel {}",
+                user_id,
+                channel_id
+            );
 
             // Check if the leaving user had a published track
             let had_track = user.published_track.read().await.is_some();
@@ -462,7 +518,9 @@ impl SfuServer {
                             &other_user,
                             channel_id,
                             &self.ws_sender.read().await.clone(),
-                        ).await {
+                        )
+                        .await
+                        {
                             tracing::error!("Failed to reneg after remove: {}", e);
                         }
                     }

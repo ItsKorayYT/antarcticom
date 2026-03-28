@@ -110,8 +110,8 @@ pub struct LoggingConfig {
 impl AppConfig {
     /// Load configuration from `antarcticom.toml`, with environment variable overrides.
     pub fn load() -> Result<Self> {
-        let config_path = std::env::var("ANTARCTICOM_CONFIG")
-            .unwrap_or_else(|_| "antarcticom.toml".to_string());
+        let config_path =
+            std::env::var("ANTARCTICOM_CONFIG").unwrap_or_else(|_| "antarcticom.toml".to_string());
 
         let builder = config::Config::builder();
 

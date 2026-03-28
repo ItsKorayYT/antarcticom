@@ -126,7 +126,10 @@ async fn seed_default_server(pool: &PgPool) -> Result<()> {
     let system_owner_id = Uuid::parse_str("00000000-0000-7000-8000-000000000000")?;
 
     // Ensure system user exists
-    if db::users::find_by_id(pool, system_owner_id).await?.is_none() {
+    if db::users::find_by_id(pool, system_owner_id)
+        .await?
+        .is_none()
+    {
         tracing::info!("Creating system user for default server");
         db::users::create(
             pool,
@@ -134,17 +137,36 @@ async fn seed_default_server(pool: &PgPool) -> Result<()> {
             "system",
             "System",
             "$argon2id$v=19$m=19456,t=2,p=1$wc8tCg$Ew", // Dummy hash
-        ).await?;
+        )
+        .await?;
     }
 
     db::servers::create(pool, server_id, "Antarcticom", system_owner_id, false).await?;
 
     // Create default channels
     let general_id = Uuid::parse_str("00000000-0000-7000-8000-000000000010")?;
-    db::channels::create(pool, general_id, server_id, "general", &ChannelType::Text, 0, None).await?;
+    db::channels::create(
+        pool,
+        general_id,
+        server_id,
+        "general",
+        &ChannelType::Text,
+        0,
+        None,
+    )
+    .await?;
 
     let voice_id = Uuid::parse_str("00000000-0000-7000-8000-000000000011")?;
-    db::channels::create(pool, voice_id, server_id, "Voice", &ChannelType::Voice, 1, None).await?;
+    db::channels::create(
+        pool,
+        voice_id,
+        server_id,
+        "Voice",
+        &ChannelType::Voice,
+        1,
+        None,
+    )
+    .await?;
 
     tracing::info!("Default server seeded with #general and Voice channels");
     Ok(())

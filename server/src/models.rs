@@ -192,11 +192,11 @@ pub struct Permissions(i64);
 
 impl Permissions {
     pub const MANAGE_CHANNELS: i64 = 1 << 0; // 1
-    pub const MANAGE_SERVER:   i64 = 1 << 1; // 2
-    pub const KICK_MEMBERS:    i64 = 1 << 2; // 4
-    pub const BAN_MEMBERS:     i64 = 1 << 3; // 8
-    pub const SEND_MESSAGES:   i64 = 1 << 4; // 16
-    pub const ADMINISTRATOR:   i64 = 1 << 5; // 32
+    pub const MANAGE_SERVER: i64 = 1 << 1; // 2
+    pub const KICK_MEMBERS: i64 = 1 << 2; // 4
+    pub const BAN_MEMBERS: i64 = 1 << 3; // 8
+    pub const SEND_MESSAGES: i64 = 1 << 4; // 16
+    pub const ADMINISTRATOR: i64 = 1 << 5; // 32
     pub const MANAGE_MESSAGES: i64 = 1 << 6; // 64
 
     pub fn new(bits: i64) -> Self {
@@ -224,7 +224,6 @@ impl Permissions {
 }
 
 // ─── Voice ──────────────────────────────────────────────────────────────────
-
 
 /// Lightweight voice participant for signaling (no DB backing).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -287,7 +286,10 @@ impl SnowflakeGenerator {
             .as_millis() as u64;
 
         let timestamp = now - self.epoch;
-        let seq = self.sequence.fetch_add(1, std::sync::atomic::Ordering::Relaxed) & 0xFFF;
+        let seq = self
+            .sequence
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            & 0xFFF;
 
         ((timestamp as i64) << 22) | ((self.worker_id as i64) << 12) | (seq as i64)
     }
@@ -299,25 +301,52 @@ impl SnowflakeGenerator {
 #[serde(tag = "type", content = "data")]
 pub enum WsEvent {
     // Client → Server
-    Identify { token: String },
-    Heartbeat { seq: u64 },
+    Identify {
+        token: String,
+    },
+    Heartbeat {
+        seq: u64,
+    },
 
     // Server → Client
-    Ready { user: UserPublic, session_id: String },
+    Ready {
+        user: UserPublic,
+        session_id: String,
+    },
     HeartbeatAck,
 
     // Messages
     MessageCreate(Message),
     MessageUpdate(Message),
-    MessageDelete { channel_id: Uuid, message_id: i64, is_deleted: bool },
+    MessageDelete {
+        channel_id: Uuid,
+        message_id: i64,
+        is_deleted: bool,
+    },
 
     // Reactions
-    ReactionAdd { channel_id: Uuid, message_id: i64, user_id: Uuid, emoji: String },
-    ReactionRemove { channel_id: Uuid, message_id: i64, user_id: Uuid, emoji: String },
+    ReactionAdd {
+        channel_id: Uuid,
+        message_id: i64,
+        user_id: Uuid,
+        emoji: String,
+    },
+    ReactionRemove {
+        channel_id: Uuid,
+        message_id: i64,
+        user_id: Uuid,
+        emoji: String,
+    },
 
     // Presence
-    PresenceUpdate { user_id: Uuid, status: PresenceStatus },
-    TypingStart { channel_id: Uuid, user_id: Uuid },
+    PresenceUpdate {
+        user_id: Uuid,
+        status: PresenceStatus,
+    },
+    TypingStart {
+        channel_id: Uuid,
+        user_id: Uuid,
+    },
 
     // Voice
     VoiceStateUpdate {
@@ -334,18 +363,31 @@ pub enum WsEvent {
         from_user_id: Uuid,
         to_user_id: Uuid,
         channel_id: Uuid,
-        signal_type: String,  // "offer", "answer", "ice"
+        signal_type: String, // "offer", "answer", "ice"
         payload: serde_json::Value,
     },
 
     // Server
     ServerCreate(Server),
-    ServerUpdate { server: ServerPublic },
+    ServerUpdate {
+        server: ServerPublic,
+    },
     ChannelCreate(Channel),
-    MemberJoin { server_id: Uuid, user: UserPublic },
-    MemberLeave { server_id: Uuid, user_id: Uuid },
-    MemberUpdate { server_id: Uuid, member: Member },
-    UserUpdate { user: UserPublic },
+    MemberJoin {
+        server_id: Uuid,
+        user: UserPublic,
+    },
+    MemberLeave {
+        server_id: Uuid,
+        user_id: Uuid,
+    },
+    MemberUpdate {
+        server_id: Uuid,
+        member: Member,
+    },
+    UserUpdate {
+        user: UserPublic,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

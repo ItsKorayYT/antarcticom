@@ -5,14 +5,14 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
+use axum::body::Body;
 use axum::extract::ws::{Message as WsMessage, WebSocket};
 use axum::extract::{FromRequestParts, Path, Query, State, WebSocketUpgrade};
-use axum::http::{StatusCode, header};
 use axum::http::request::Parts;
+use axum::http::{header, StatusCode};
 use axum::response::IntoResponse;
-use axum::routing::{get, post, put, delete};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
-use axum::body::Body;
 use axum_extra::extract::Multipart;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -38,7 +38,7 @@ async fn check_permission(
 ) -> AppResult<()> {
     // 1. Fetch member permissions
     let perms = db::members::get_permissions(&state.db, user_id, server_id).await?;
-    
+
     // 2. Check if they have the required permission (or Administrator)
     if !perms.has(permission) {
         return Err(AppError::Forbidden);
@@ -81,19 +81,22 @@ impl AppState {
     pub fn new(db: DbPool, redis: Option<redis::Client>, config: AppConfig) -> Self {
         let voice_public_ip = config.voice.public_ip.clone();
         let ws_sessions: Arc<DashMap<Uuid, broadcast::Sender<String>>> = Arc::new(DashMap::new());
-        let sfu = Arc::new(crate::voice::SfuServer::new(voice_public_ip).expect("Failed to initialize SFU"));
+        let sfu = Arc::new(
+            crate::voice::SfuServer::new(voice_public_ip).expect("Failed to initialize SFU"),
+        );
 
         // Wire up the SFU's ws_sender so it can push signaling messages to clients.
         {
             let ws_sessions_c = ws_sessions.clone();
             let sfu_c = sfu.clone();
             tokio::spawn(async move {
-                let sender: crate::voice::WsSenderFn = Arc::new(move |target_user_id: Uuid, event: serde_json::Value| {
-                    if let Some(tx) = ws_sessions_c.get(&target_user_id) {
-                        let json = serde_json::to_string(&event).unwrap_or_default();
-                        let _ = tx.send(json);
-                    }
-                });
+                let sender: crate::voice::WsSenderFn =
+                    Arc::new(move |target_user_id: Uuid, event: serde_json::Value| {
+                        if let Some(tx) = ws_sessions_c.get(&target_user_id) {
+                            let json = serde_json::to_string(&event).unwrap_or_default();
+                            let _ = tx.send(json);
+                        }
+                    });
                 sfu_c.set_ws_sender(sender).await;
             });
         }
@@ -219,8 +222,7 @@ impl AppState {
                 };
 
                 // Validate the token locally using the hub's public key
-                let claims =
-                    auth::validate_token_with_public_key(&pub_key_pem, token)?;
+                let claims = auth::validate_token_with_public_key(&pub_key_pem, token)?;
                 let uid = auth::user_id_from_claims(&claims)?;
                 let uname = claims.username;
 
@@ -235,8 +237,10 @@ impl AppState {
         };
 
         // Cache the result
-        self.token_cache
-            .insert(token.to_string(), (user_id, username.clone(), Instant::now()));
+        self.token_cache.insert(
+            token.to_string(),
+            (user_id, username.clone(), Instant::now()),
+        );
 
         Ok((user_id, username))
     }
@@ -255,7 +259,10 @@ pub struct AuthUser {
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = AppError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let header = parts
             .headers
             .get("Authorization")
@@ -330,22 +337,43 @@ pub fn build_router(state: AppState) -> Router {
             // Channels
             .route("/api/servers/:server_id/channels", post(create_channel))
             .route("/api/servers/:server_id/channels", get(list_channels))
-            .route("/api/servers/:server_id/channels/:channel_id", delete(delete_channel))
+            .route(
+                "/api/servers/:server_id/channels/:channel_id",
+                delete(delete_channel),
+            )
             // Roles
             .route("/api/servers/:server_id/roles", get(list_roles))
             .route("/api/servers/:server_id/roles", post(create_role))
-            .route("/api/servers/:server_id/roles/:role_id", delete(delete_role).patch(update_role))
-            .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::put(assign_role))
-            .route("/api/servers/:server_id/members/:user_id/roles/:role_id", axum::routing::delete(remove_role))
+            .route(
+                "/api/servers/:server_id/roles/:role_id",
+                delete(delete_role).patch(update_role),
+            )
+            .route(
+                "/api/servers/:server_id/members/:user_id/roles/:role_id",
+                axum::routing::put(assign_role),
+            )
+            .route(
+                "/api/servers/:server_id/members/:user_id/roles/:role_id",
+                axum::routing::delete(remove_role),
+            )
             .route("/api/servers/:server_id/members", get(list_members))
-            .route("/api/servers/:server_id/members/:user_id", get(get_member).delete(kick_member))
+            .route(
+                "/api/servers/:server_id/members/:user_id",
+                get(get_member).delete(kick_member),
+            )
             // Bans
             .route("/api/servers/:server_id/bans", get(list_bans))
-            .route("/api/servers/:server_id/bans/:user_id", post(ban_member).delete(unban_member))
+            .route(
+                "/api/servers/:server_id/bans/:user_id",
+                post(ban_member).delete(unban_member),
+            )
             // Messages
             .route("/api/channels/:channel_id/messages", post(send_message))
             .route("/api/channels/:channel_id/messages", get(get_messages))
-            .route("/api/channels/:channel_id/messages/:message_id", delete(delete_message))
+            .route(
+                "/api/channels/:channel_id/messages/:message_id",
+                delete(delete_message),
+            )
             // WebSocket gateway
             .route("/ws", get(ws_upgrade))
             // Avatars
@@ -354,8 +382,14 @@ pub fn build_router(state: AppState) -> Router {
             // Voice signaling
             .route("/api/voice/:channel_id/join", post(voice_join))
             .route("/api/voice/:channel_id/leave", post(voice_leave))
-            .route("/api/voice/:channel_id/state", axum::routing::patch(voice_update_state))
-            .route("/api/voice/:channel_id/participants", get(voice_participants));
+            .route(
+                "/api/voice/:channel_id/state",
+                axum::routing::patch(voice_update_state),
+            )
+            .route(
+                "/api/voice/:channel_id/participants",
+                get(voice_participants),
+            );
     }
 
     router
@@ -374,10 +408,15 @@ async fn upload_avatar(
     auth: AuthUser,
     mut multipart: Multipart,
 ) -> AppResult<Json<serde_json::Value>> {
-    while let Some(field) = multipart.next_field().await.map_err(|e| {
-        AppError::BadRequest(format!("Invalid multipart data: {}", e))
-    })? {
-        let content_type = field.content_type().unwrap_or("application/octet-stream").to_string();
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| AppError::BadRequest(format!("Invalid multipart data: {}", e)))?
+    {
+        let content_type = field
+            .content_type()
+            .unwrap_or("application/octet-stream")
+            .to_string();
 
         if !ALLOWED_CONTENT_TYPES.contains(&content_type.as_str()) {
             return Err(AppError::BadRequest(format!(
@@ -394,9 +433,10 @@ async fn upload_avatar(
             _ => "bin",
         };
 
-        let data = field.bytes().await.map_err(|e| {
-            AppError::BadRequest(format!("Failed to read file: {}", e))
-        })?;
+        let data = field
+            .bytes()
+            .await
+            .map_err(|e| AppError::BadRequest(format!("Failed to read file: {}", e)))?;
 
         if data.len() > MAX_AVATAR_SIZE {
             return Err(AppError::BadRequest(format!(
@@ -407,7 +447,7 @@ async fn upload_avatar(
         }
 
         // Compute SHA-256 hash
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
         let mut hasher = Sha256::new();
         hasher.update(&data);
         let hash = format!("{:x}", hasher.finalize());
@@ -438,14 +478,14 @@ async fn upload_avatar(
             let event = WsEvent::UserUpdate {
                 user: updated_user.into(),
             };
-            
+
             // Broadcast to all servers the user is a member of so other users see the update
             if let Ok(servers) = db::servers::list_for_user(&state.db, auth.user_id).await {
                 for server in servers {
                     state.broadcast_to_server(&server.id, &event).await;
                 }
             }
-            
+
             // Also broadcast directly to the user (their own sessions)
             state.broadcast_to_user(&auth.user_id, &event);
         }
@@ -481,16 +521,20 @@ async fn get_avatar(
         }
     }
 
-    let (path, content_type) = found.ok_or_else(|| AppError::NotFound("Avatar not found".to_string()))?;
+    let (path, content_type) =
+        found.ok_or_else(|| AppError::NotFound("Avatar not found".to_string()))?;
 
-    let data = tokio::fs::read(&path).await.map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Failed to read avatar: {}", e))
-    })?;
+    let data = tokio::fs::read(&path)
+        .await
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to read avatar: {}", e)))?;
 
     Ok((
         [
             (header::CONTENT_TYPE, content_type),
-            (header::CACHE_CONTROL, "public, max-age=31536000, immutable".to_string()),
+            (
+                header::CACHE_CONTROL,
+                "public, max-age=31536000, immutable".to_string(),
+            ),
         ],
         Body::from(data),
     ))
@@ -504,14 +548,21 @@ async fn register(
 ) -> AppResult<Json<AuthResponse>> {
     // Validate input
     if req.username.len() < 3 || req.username.len() > 32 {
-        return Err(AppError::BadRequest("Username must be 3-32 characters".to_string()));
+        return Err(AppError::BadRequest(
+            "Username must be 3-32 characters".to_string(),
+        ));
     }
     if req.password.len() < 8 {
-        return Err(AppError::BadRequest("Password must be at least 8 characters".to_string()));
+        return Err(AppError::BadRequest(
+            "Password must be at least 8 characters".to_string(),
+        ));
     }
 
     // Check if username is taken
-    if db::users::find_by_username(&state.db, &req.username).await?.is_some() {
+    if db::users::find_by_username(&state.db, &req.username)
+        .await?
+        .is_some()
+    {
         return Err(AppError::Conflict("Username already taken".to_string()));
     }
 
@@ -519,25 +570,37 @@ async fn register(
     let password = req.password.clone();
     let password_hash = tokio::task::spawn_blocking(move || auth::hash_password(&password))
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Password hashing task failed: {}", e)))?
-        ?;
+        .map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Password hashing task failed: {}", e))
+        })??;
 
     // Create user
     let display_name = req.display_name.unwrap_or_else(|| req.username.clone());
     let user_id = Uuid::now_v7();
-    let user = db::users::create(&state.db, user_id, &req.username, &display_name, &password_hash).await?;
+    let user = db::users::create(
+        &state.db,
+        user_id,
+        &req.username,
+        &display_name,
+        &password_hash,
+    )
+    .await?;
 
     // Auto-join user to all existing servers (i.e. the default server)
     let all_servers = db::servers::list_all(&state.db).await?;
     let user_public = UserPublic::from(user.clone());
     let system_owner_id = Uuid::parse_str("00000000-0000-7000-8000-000000000000").unwrap();
-    
+
     for server in &all_servers {
         // Claim the server if it's currently owned by the system user
         if server.owner_id == system_owner_id {
-            tracing::info!("User {} is claiming the default server {} on registration", user.id, server.id);
+            tracing::info!(
+                "User {} is claiming the default server {} on registration",
+                user.id,
+                server.id
+            );
             let _ = db::servers::transfer_ownership(&state.db, server.id, user.id).await;
-            
+
             // Broadcast the server update so any connected clients get it (unlikely on register, but good for completeness)
             if let Ok(Some(updated_server)) = db::servers::find_by_id(&state.db, server.id).await {
                 let event = WsEvent::ServerUpdate {
@@ -578,8 +641,9 @@ async fn login(
     let hash = user.password_hash.clone();
     let valid = tokio::task::spawn_blocking(move || auth::verify_password(&password, &hash))
         .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Password verification task failed: {}", e)))?
-        ?;
+        .map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Password verification task failed: {}", e))
+        })??;
     if !valid {
         return Err(AppError::Unauthorized);
     }
@@ -645,9 +709,7 @@ async fn validate_token_endpoint(
 
 /// GET /api/auth/public-key — auth hub only.
 /// Returns the RSA public key PEM so community servers can verify tokens locally.
-async fn public_key_endpoint(
-    State(state): State<AppState>,
-) -> AppResult<Json<PublicKeyResponse>> {
+async fn public_key_endpoint(State(state): State<AppState>) -> AppResult<Json<PublicKeyResponse>> {
     let pem = auth::read_public_key_pem(&state.config.auth)?;
     Ok(Json(PublicKeyResponse {
         public_key_pem: pem,
@@ -657,15 +719,13 @@ async fn public_key_endpoint(
 
 /// GET /api/instance/info — always available.
 /// Returns server mode and metadata for client discovery.
-async fn instance_info(
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn instance_info(State(state): State<AppState>) -> impl IntoResponse {
     let mode_str = match state.config.mode {
         ServerMode::AuthHub => "auth_hub",
         ServerMode::Community => "community",
         ServerMode::Standalone => "standalone",
     };
-    
+
     let mut default_server_id = None;
     if state.config.is_community() {
         if let Ok(servers) = db::servers::list_all(&state.db).await {
@@ -707,19 +767,38 @@ async fn create_server(
 
     // Create default channels
     let general_id = Uuid::now_v7();
-    db::channels::create(&state.db, general_id, server_id, "general", &ChannelType::Text, 0, None).await?;
+    db::channels::create(
+        &state.db,
+        general_id,
+        server_id,
+        "general",
+        &ChannelType::Text,
+        0,
+        None,
+    )
+    .await?;
     let voice_id = Uuid::now_v7();
-    db::channels::create(&state.db, voice_id, server_id, "Voice", &ChannelType::Voice, 1, None).await?;
+    db::channels::create(
+        &state.db,
+        voice_id,
+        server_id,
+        "Voice",
+        &ChannelType::Voice,
+        1,
+        None,
+    )
+    .await?;
 
     // Create @everyone role (default permissions: SEND_MESSAGES)
     db::roles::create(
-        &state.db, 
-        server_id, 
-        "@everyone", 
-        Permissions::SEND_MESSAGES, 
-        0, 
-        0
-    ).await?;
+        &state.db,
+        server_id,
+        "@everyone",
+        Permissions::SEND_MESSAGES,
+        0,
+        0,
+    )
+    .await?;
 
     Ok(Json(server))
 }
@@ -752,7 +831,11 @@ async fn join_server(
     if let Ok(Some(server)) = db::servers::find_by_id(&state.db, server_id).await {
         if server.owner_id == system_owner_id {
             // First user to join the default server claims it
-            tracing::info!("User {} is claiming the default server {}", auth.user_id, server_id);
+            tracing::info!(
+                "User {} is claiming the default server {}",
+                auth.user_id,
+                server_id
+            );
             db::servers::transfer_ownership(&state.db, server_id, auth.user_id).await?;
 
             // Broadcast the server update so the client gets owner permissions immediately
@@ -832,16 +915,17 @@ async fn create_role(
     Json(req): Json<CreateRoleRequest>,
 ) -> AppResult<Json<Role>> {
     check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_SERVER).await?;
-    
+
     let role = db::roles::create(
-        &state.db, 
-        server_id, 
-        &req.name, 
-        req.permissions, 
-        req.color, 
-        req.position
-    ).await?;
-    
+        &state.db,
+        server_id,
+        &req.name,
+        req.permissions,
+        req.color,
+        req.position,
+    )
+    .await?;
+
     Ok(Json(role))
 }
 
@@ -888,10 +972,9 @@ async fn assign_role(
     db::members::add_role(&state.db, user_id, server_id, role_id).await?;
 
     if let Ok(Some(member)) = db::members::find(&state.db, user_id, server_id).await {
-        state.broadcast_to_server(&server_id, &WsEvent::MemberUpdate {
-            server_id,
-            member,
-        }).await;
+        state
+            .broadcast_to_server(&server_id, &WsEvent::MemberUpdate { server_id, member })
+            .await;
     }
 
     Ok(StatusCode::OK)
@@ -906,10 +989,9 @@ async fn remove_role(
     db::members::remove_role(&state.db, user_id, server_id, role_id).await?;
 
     if let Ok(Some(member)) = db::members::find(&state.db, user_id, server_id).await {
-        state.broadcast_to_server(&server_id, &WsEvent::MemberUpdate {
-            server_id,
-            member,
-        }).await;
+        state
+            .broadcast_to_server(&server_id, &WsEvent::MemberUpdate { server_id, member })
+            .await;
     }
 
     Ok(StatusCode::OK)
@@ -930,15 +1012,20 @@ async fn list_members(
     Path(server_id): Path<Uuid>,
 ) -> AppResult<Json<Vec<Member>>> {
     let mut members = db::members::list_for_server(&state.db, server_id).await?;
-    
+
     // Populate presence status
     let user_ids: Vec<Uuid> = members.iter().map(|m| m.user_id).collect();
     let statuses = state.presence.get_bulk_status(&user_ids);
-    
+
     for member in &mut members {
-        member.status = Some(statuses.get(&member.user_id).cloned().unwrap_or(PresenceStatus::Offline));
+        member.status = Some(
+            statuses
+                .get(&member.user_id)
+                .cloned()
+                .unwrap_or(PresenceStatus::Offline),
+        );
     }
-    
+
     Ok(Json(members))
 }
 
@@ -959,10 +1046,7 @@ async fn kick_member(
     db::members::remove(&state.db, user_id, server_id).await?;
 
     // Broadcast MemberLeave
-    let event = WsEvent::MemberLeave {
-        server_id,
-        user_id,
-    };
+    let event = WsEvent::MemberLeave { server_id, user_id };
     state.broadcast_to_server(&server_id, &event).await;
 
     Ok(StatusCode::NO_CONTENT)
@@ -997,10 +1081,7 @@ async fn ban_member(
     db::members::remove(&state.db, user_id, server_id).await?;
 
     // Broadcast MemberLeave
-    let event = WsEvent::MemberLeave {
-        server_id,
-        user_id,
-    };
+    let event = WsEvent::MemberLeave { server_id, user_id };
     state.broadcast_to_server(&server_id, &event).await;
 
     Ok(StatusCode::NO_CONTENT)
@@ -1048,7 +1129,13 @@ async fn create_channel(
     Path(server_id): Path<Uuid>,
     Json(req): Json<CreateChannelRequest>,
 ) -> AppResult<Json<Channel>> {
-    check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_CHANNELS).await?;
+    check_permission(
+        &state,
+        auth.user_id,
+        server_id,
+        Permissions::MANAGE_CHANNELS,
+    )
+    .await?;
 
     let channel_id = Uuid::now_v7();
     let channel = db::channels::create(
@@ -1073,7 +1160,7 @@ async fn list_channels(
     Path(server_id): Path<Uuid>,
 ) -> AppResult<Json<Vec<Channel>>> {
     let mut channels = db::channels::list_for_server(&state.db, server_id).await?;
-    
+
     // Embed active voice participants into voice channels
     for channel in channels.iter_mut() {
         if channel.channel_type == ChannelType::Voice {
@@ -1084,7 +1171,7 @@ async fn list_channels(
             }
         }
     }
-    
+
     Ok(Json(channels))
 }
 
@@ -1093,11 +1180,17 @@ async fn delete_channel(
     auth: AuthUser,
     Path((server_id, channel_id)): Path<(Uuid, Uuid)>,
 ) -> AppResult<StatusCode> {
-    check_permission(&state, auth.user_id, server_id, Permissions::MANAGE_CHANNELS).await?;
+    check_permission(
+        &state,
+        auth.user_id,
+        server_id,
+        Permissions::MANAGE_CHANNELS,
+    )
+    .await?;
 
     // Delete the channel from the database
     let deleted = db::channels::delete(&state.db, channel_id).await?;
-    
+
     if deleted {
         // Broadcast channel deletion (you might want to add a ChannelDelete event to WsEvent instead of raw ID, but we can reuse MessageDelete-like logic or just rely on state refetch for now. Since we don't have ChannelDelete in WsEvent, we do nothing for now and rely on standard app reload or we should add ChannelDelete event).
         // For now, return OK.
@@ -1144,7 +1237,8 @@ async fn get_messages(
     Query(params): Query<MessageQuery>,
 ) -> AppResult<Json<Vec<Message>>> {
     let limit = params.limit.unwrap_or(50).min(100);
-    let messages = db::messages::list_for_channel(&state.db, channel_id, params.before, limit).await?;
+    let messages =
+        db::messages::list_for_channel(&state.db, channel_id, params.before, limit).await?;
     Ok(Json(messages))
 }
 
@@ -1154,10 +1248,12 @@ async fn delete_message(
     Path((channel_id, message_id)): Path<(Uuid, i64)>,
 ) -> AppResult<StatusCode> {
     // 1. Fetch message to check authorship
-    let message_opt = db::messages::list_for_channel(&state.db, channel_id, Some(message_id + 1), 1).await?;
-    let message = message_opt.into_iter().find(|m| m.id == message_id).ok_or_else(|| {
-        AppError::NotFound("Message not found".to_string())
-    })?;
+    let message_opt =
+        db::messages::list_for_channel(&state.db, channel_id, Some(message_id + 1), 1).await?;
+    let message = message_opt
+        .into_iter()
+        .find(|m| m.id == message_id)
+        .ok_or_else(|| AppError::NotFound("Message not found".to_string()))?;
 
     // 2. Fetch channel to get server_id for permission check
     // Use `query` instead of `query!` to avoid offline sqlx compilation issues in this environment
@@ -1165,7 +1261,7 @@ async fn delete_message(
         .bind(channel_id)
         .fetch_optional(&state.db)
         .await?;
-        
+
     let channel_server_id: Uuid = match channel_record {
         Some(row) => sqlx::Row::try_get(&row, "server_id")?,
         None => return Err(AppError::NotFound("Channel not found".to_string())),
@@ -1174,7 +1270,14 @@ async fn delete_message(
     // 3. Verify ownership OR MANAGE_MESSAGES permission
     if message.author_id != auth.user_id {
         // Not the author, check permissions
-        if let Err(e) = check_permission(&state, auth.user_id, channel_server_id, Permissions::MANAGE_MESSAGES).await {
+        if let Err(e) = check_permission(
+            &state,
+            auth.user_id,
+            channel_server_id,
+            Permissions::MANAGE_MESSAGES,
+        )
+        .await
+        {
             return Err(e); // Propagate Forbidden/Unauthorized
         }
     }
@@ -1184,17 +1287,21 @@ async fn delete_message(
         return Err(AppError::NotFound("Message not found".to_string()));
     }
 
-    state.broadcast_to_channel(&channel_id, &WsEvent::MessageDelete { channel_id, message_id, is_deleted: true });
+    state.broadcast_to_channel(
+        &channel_id,
+        &WsEvent::MessageDelete {
+            channel_id,
+            message_id,
+            is_deleted: true,
+        },
+    );
 
     Ok(StatusCode::NO_CONTENT)
 }
 
 // ─── WebSocket Gateway ──────────────────────────────────────────────────────
 
-async fn ws_upgrade(
-    ws: WebSocketUpgrade,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
+async fn ws_upgrade(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_ws(socket, state))
 }
 
@@ -1203,34 +1310,36 @@ use futures_util::{SinkExt, StreamExt};
 async fn handle_ws(mut socket: WebSocket, state: AppState) {
     // Wait for Identify message with token
     let user_id = match socket.recv().await {
-        Some(Ok(WsMessage::Text(text))) => {
-            match serde_json::from_str::<WsEvent>(&text) {
-                Ok(WsEvent::Identify { token }) => {
-                    match state.validate_token_federated(&token).await {
-                        Ok((id, _username)) => id,
-                        Err(_) => {
-                            let _ = socket.send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
-                                code: 1000,
-                                reason: "Invalid token".into(),
-                            }))).await;
-                            return;
-                        }
-                    }
-                }
-                _ => {
-                    let _ = socket.send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
-                        code: 1000,
-                        reason: "Expected Identify".into(),
-                    }))).await;
+        Some(Ok(WsMessage::Text(text))) => match serde_json::from_str::<WsEvent>(&text) {
+            Ok(WsEvent::Identify { token }) => match state.validate_token_federated(&token).await {
+                Ok((id, _username)) => id,
+                Err(_) => {
+                    let _ = socket
+                        .send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
+                            code: 1000,
+                            reason: "Invalid token".into(),
+                        })))
+                        .await;
                     return;
                 }
+            },
+            _ => {
+                let _ = socket
+                    .send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
+                        code: 1000,
+                        reason: "Expected Identify".into(),
+                    })))
+                    .await;
+                return;
             }
-        }
+        },
         _ => {
-            let _ = socket.send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
-                code: 1000,
-                reason: "No message received".into(),
-            }))).await;
+            let _ = socket
+                .send(WsMessage::Close(Some(axum::extract::ws::CloseFrame {
+                    code: 1000,
+                    reason: "No message received".into(),
+                })))
+                .await;
             return;
         }
     };
@@ -1276,19 +1385,21 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
         session_id: Uuid::now_v7().to_string(),
     };
     let _ = socket
-        .send(WsMessage::Text(serde_json::to_string(&ready).unwrap().into()))
+        .send(WsMessage::Text(
+            serde_json::to_string(&ready).unwrap().into(),
+        ))
         .await;
 
     // Set online status
     state.presence.set_status(user_id, PresenceStatus::Online);
-    
+
     // Broadcast presence update to all mutual guilds/users (simplified: broadcast to all known channels for now)
     // In a real app, we'd only send to mutuals. Here, we send to channels the user is in.
-    let presence_update = WsEvent::PresenceUpdate { 
-        user_id, 
-        status: PresenceStatus::Online 
+    let presence_update = WsEvent::PresenceUpdate {
+        user_id,
+        status: PresenceStatus::Online,
     };
-    
+
     for channel_id in &subscribed_channels {
         state.broadcast_to_channel(channel_id, &presence_update);
     }
@@ -1298,11 +1409,7 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
     // Spawn task to forward broadcast messages to WebSocket
     let mut forward_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
-            if sender
-                .send(WsMessage::Text(msg.into()))
-                .await
-                .is_err()
-            {
+            if sender.send(WsMessage::Text(msg.into())).await.is_err() {
                 break;
             }
         }
@@ -1317,45 +1424,81 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
                     // Parse incoming messages and relay WebRTC signals
                     match serde_json::from_str::<WsEvent>(&text) {
                         Ok(event) => {
-                        if let WsEvent::WebRTCSignal { to_user_id, channel_id, signal_type, payload, .. } = event {
-                            
-                            // If to_user_id is nil, it's for the SFU (Server)
-                            if to_user_id.is_nil() {
-                                if signal_type == "offer" {
-                                    if let Some(sdp) = payload.as_str() {
-                                        match state_for_recv.sfu.handle_offer(channel_id, user_id, sdp.to_string()).await {
-                                            Ok(answer_sdp) => {
-                                                let answer = WsEvent::WebRTCSignal {
-                                                    from_user_id: Uuid::nil(),
-                                                    to_user_id: user_id,
-                                                    channel_id,
-                                                    signal_type: "answer".to_string(),
-                                                    payload: serde_json::Value::String(answer_sdp),
-                                                };
-                                                state_for_recv.broadcast_to_user(&user_id, &answer);
+                            if let WsEvent::WebRTCSignal {
+                                to_user_id,
+                                channel_id,
+                                signal_type,
+                                payload,
+                                ..
+                            } = event
+                            {
+                                // If to_user_id is nil, it's for the SFU (Server)
+                                if to_user_id.is_nil() {
+                                    if signal_type == "offer" {
+                                        if let Some(sdp) = payload.as_str() {
+                                            match state_for_recv
+                                                .sfu
+                                                .handle_offer(channel_id, user_id, sdp.to_string())
+                                                .await
+                                            {
+                                                Ok(answer_sdp) => {
+                                                    let answer = WsEvent::WebRTCSignal {
+                                                        from_user_id: Uuid::nil(),
+                                                        to_user_id: user_id,
+                                                        channel_id,
+                                                        signal_type: "answer".to_string(),
+                                                        payload: serde_json::Value::String(
+                                                            answer_sdp,
+                                                        ),
+                                                    };
+                                                    state_for_recv
+                                                        .broadcast_to_user(&user_id, &answer);
+                                                }
+                                                Err(e) => tracing::error!(
+                                                    "SFU error handling offer: {}",
+                                                    e
+                                                ),
                                             }
-                                            Err(e) => tracing::error!("SFU error handling offer: {}", e),
+                                        }
+                                    } else if signal_type == "answer" {
+                                        // Client is responding to a server-initiated renegotiation offer
+                                        if let Some(sdp) = payload.as_str() {
+                                            if let Err(e) = state_for_recv
+                                                .sfu
+                                                .handle_answer(channel_id, user_id, sdp.to_string())
+                                                .await
+                                            {
+                                                tracing::error!("SFU error handling answer: {}", e);
+                                            }
+                                        }
+                                    } else if signal_type == "ice" {
+                                        if let Err(e) = state_for_recv
+                                            .sfu
+                                            .handle_ice_candidate(
+                                                channel_id,
+                                                user_id,
+                                                payload.clone(),
+                                            )
+                                            .await
+                                        {
+                                            tracing::error!(
+                                                "SFU error handling ICE candidate: {}",
+                                                e
+                                            );
                                         }
                                     }
-                                } else if signal_type == "answer" {
-                                    // Client is responding to a server-initiated renegotiation offer
-                                    if let Some(sdp) = payload.as_str() {
-                                        if let Err(e) = state_for_recv.sfu.handle_answer(channel_id, user_id, sdp.to_string()).await {
-                                            tracing::error!("SFU error handling answer: {}", e);
-                                        }
-                                    }
-                                } else if signal_type == "ice" {
-                                    if let Err(e) = state_for_recv.sfu.handle_ice_candidate(channel_id, user_id, payload.clone()).await {
-                                        tracing::error!("SFU error handling ICE candidate: {}", e);
-                                    }
+                                } else {
+                                    tracing::warn!("Ignoring P2P WebRTC signal from user {}: Legacy P2P is disabled", user_id);
                                 }
-                            } else {
-                                tracing::warn!("Ignoring P2P WebRTC signal from user {}: Legacy P2P is disabled", user_id);
                             }
                         }
-                        }
                         Err(e) => {
-                            tracing::warn!("Failed to parse WsEvent from user {}: {} — raw: {}", user_id, e, &text[..text.len().min(200)]);
+                            tracing::warn!(
+                                "Failed to parse WsEvent from user {}: {} — raw: {}",
+                                user_id,
+                                e,
+                                &text[..text.len().min(200)]
+                            );
                         }
                     }
                 }
@@ -1394,18 +1537,18 @@ async fn handle_ws(mut socket: WebSocket, state: AppState) {
 
     // Set offline status
     state.presence.set_offline(&user_id);
-    
-    let presence_update = WsEvent::PresenceUpdate { 
-        user_id, 
-        status: PresenceStatus::Offline 
+
+    let presence_update = WsEvent::PresenceUpdate {
+        user_id,
+        status: PresenceStatus::Offline,
     };
-    
+
     // We already unsubscribed, but we need to notify others.
     // The channel_subs map still has other users.
     // We can iterate over the channels we *were* in.
     // However, we just cleared local `subscribed_channels` from global map.
     // But we still have the list in `subscribed_channels` local variable!
-    
+
     for channel_id in &subscribed_channels {
         state.broadcast_to_channel(channel_id, &presence_update);
     }
