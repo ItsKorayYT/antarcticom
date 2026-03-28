@@ -151,6 +151,11 @@ impl SfuServer {
                     track_id, user_id_c, codec.capability.mime_type, track.kind()
                 );
 
+                if track.kind() != webrtc::rtp_transceiver::rtp_codec::RTPCodecType::Audio {
+                    tracing::info!("Ignoring non-audio track {} from user {}", track_id, user_id_c);
+                    return;
+                }
+
                 // Always create a new local track with explicit audio/opus capability.
                 // This avoids the webrtc-rs bug where it puts opus into m=video sections.
                 let audio_capability = RTCRtpCodecCapability {
