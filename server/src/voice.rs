@@ -266,43 +266,7 @@ impl SfuServer {
         pc.set_remote_description(RTCSessionDescription::offer(offer_sdp)?)
             .await?;
 
-        // Step 2: Subscribe this new user to all existing users' tracks
-        let mut subscribed_count = 0u32;
-        for other_entry in channel.users.iter() {
-            let other_user = other_entry.value();
-            if other_user.user_id == user_id {
-                continue;
-            }
-            let other_track = other_user.published_track.read().await;
-            if let Some(track) = &*other_track {
-                match pc.add_track(track.clone()).await {
-                    Ok(sender) => {
-                        user.senders.insert(other_user.user_id, sender);
-                        subscribed_count += 1;
-                        tracing::info!(
-                            "Subscribed user {} to track from user {}",
-                            user_id,
-                            other_user.user_id
-                        );
-                    }
-                    Err(e) => {
-                        tracing::error!(
-                            "Error subscribing user {} to track from user {}: {}",
-                            user_id,
-                            other_user.user_id,
-                            e
-                        );
-                    }
-                }
-            }
-        }
-        tracing::info!(
-            "User {} subscribed to {} existing tracks",
-            user_id,
-            subscribed_count
-        );
-
-        // Step 3: Create answer
+        // Step 2: Create answer for the client's initial stream
         let answer = pc.create_answer(None).await?;
         pc.set_local_description(answer).await?;
 
@@ -318,17 +282,60 @@ impl SfuServer {
             local_desc.sdp.len()
         );
 
-        // Step 4: Schedule renegotiation for all OTHER existing users so they
-        // receive this new user's track. We spawn this as a background task
-        // because the new user's on_track hasn't fired yet (it fires after
-        // ICE connects and media flows). We'll poll until the track is ready.
+        // Step 3: Schedule renegotiation for all OTHER existing users so they
+        // receive this new user's track, AND send existing tracks to this NEW user.
+        // We spawn this as a background task.
         let channel_c = channel.clone();
         let sfu_self = self.channels.clone();
         let ws_sender_ref = self.ws_sender.read().await.clone();
         let published_track_for_renego = user.published_track.clone();
+        let user_c = user.clone();
 
         tokio::spawn(async move {
-            // Wait for the new user's track to be published (up to 10 seconds)
+            // Give the client a tiny bit of time to process the initial answer
+            // before we bombard them with a renegotiation offer for existing tracks.
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+            // Subscribe this new user to all existing users' tracks
+            let mut subscribed_count = 0u32;
+            for other_entry in channel_c.users.iter() {
+                let other_user = other_entry.value();
+                if other_user.user_id == user_id {
+                    continue;
+                }
+                let other_track = other_user.published_track.read().await;
+                if let Some(track) = &*other_track {
+                    match user_c.peer_connection.add_track(track.clone()).await {
+                        Ok(sender) => {
+                            user_c.senders.insert(other_user.user_id, sender);
+                            subscribed_count += 1;
+                            tracing::info!(
+                                "Added existing user {}'s track to new user {}'s PC",
+                                other_user.user_id,
+                                user_id
+                            );
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "Error adding existing track to user {}: {}",
+                                user_id,
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Immediately send an offer to the new user if they subscribed to existing tracks
+            if subscribed_count > 0 {
+                if let Err(e) = Self::create_and_send_offer(&user_c, channel_id, &ws_sender_ref).await {
+                    tracing::error!("Failed to send initial renegotiation offer to user {}: {}", user_id, e);
+                } else {
+                    tracing::info!("Sent renegotiation offer to new user {} with {} existing tracks", user_id, subscribed_count);
+                }
+            }
+
+            // Wait for the new user's track to be published (up to ~10 seconds normally, we just loop)
             let track = loop {
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                 let read = published_track_for_renego.read().await;
@@ -350,7 +357,7 @@ impl SfuServer {
             };
 
             tracing::info!(
-                "User {}'s track is ready, renegotiating with existing users",
+                "User {}'s track is ready, renegotiating with other existing users",
                 user_id
             );
 
