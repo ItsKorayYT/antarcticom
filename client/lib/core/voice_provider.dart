@@ -205,9 +205,9 @@ class VoiceNotifier extends StateNotifier<VoiceState> {
         RegExp(r'(m=audio \S+ \S+)(.+)', multiLine: true),
         (match) {
           final header = match.group(1)!;
-          final payloads = match.group(2)!;
-          final cleaned = payloads.replaceAll(RegExp(' $pt\\b|\\b$pt '), ' ').trim();
-          return '$header $cleaned';
+          final pts = match.group(2)!.trim().split(RegExp(r'\s+'));
+          pts.remove(pt);
+          return '$header ${pts.join(' ')}';
         },
       );
     }
